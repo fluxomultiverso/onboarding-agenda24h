@@ -542,7 +542,6 @@ function createEmptyState() {
       formas_pagamento: "",
       orientacoes: "",
       restricoes: "",
-      quando_transferir: "",
       mensagem_transferencia: "",
       antecedencia_agendar_min: 60,
       antecedencia_cancelar_min: 120,
@@ -1893,10 +1892,7 @@ function renderStepIA(container) {
         <label class="form-label">Mensagem de transferência</label>
         <textarea class="form-textarea" id="ia-msg-trans">${escapeHtml(ia.mensagem_transferencia)}</textarea>
       </div>
-      <div class="form-field">
-        <label class="form-label">Quando encaminhar ao humano</label>
-        <textarea class="form-textarea" id="ia-quando-trans">${escapeHtml(ia.quando_transferir)}</textarea>
-      </div>
+      <p class="form-hint">A transferência para atendimento humano ocorre somente quando o cliente pedir explicitamente.</p>
     </fieldset>
 
     <fieldset class="form-section">
@@ -1986,7 +1982,6 @@ function renderStepIA(container) {
   bind("ia-info-hum", "ia_pode_informar_atendimento");
   bind("ia-info-res", "ia_pode_informar_reserva");
   bind("ia-msg-trans", "mensagem_transferencia");
-  bind("ia-quando-trans", "quando_transferir");
   bind("ia-pagto", "formas_pagamento");
   bind("ia-orient", "orientacoes");
   bind("ia-restr", "restricoes");
@@ -2217,7 +2212,6 @@ function buildRawJSONFinal() {
       atendimento_humano: state.ia.ia_pode_informar_atendimento ? (state.ia.numero_atendimento_humano || undefined) : undefined,
       reserva: state.ia.ia_pode_informar_reserva ? (state.ia.numero_reserva || undefined) : undefined,
     },
-    quando_transferir: state.ia.quando_transferir || undefined,
     mensagem_transferencia: state.ia.mensagem_transferencia || undefined,
     faqs: state.ia.faqs.map(f => ({ pergunta: f.pergunta, resposta: f.resposta })),
     catalogo_referencia: state.servicos.map(s => ({
@@ -2471,7 +2465,7 @@ function focusError(err) {
 function gerarCodigoFAQ(faqs) {
   const entradas=faqs.map(f=>({pergunta:f.pergunta.trim(),resposta:f.resposta.trim()}));
   return [
-    '// Code Tool: consultar_informacoes',
+    '// Code Tool: consultar_faq',
     '// Description: Consulte esta ferramenta antes de responder dúvidas sobre o estabelecimento, FAQ e orientações. Envie a pergunta do cliente. Se não encontrar resposta, não invente.',
     'const faq = '+JSON.stringify(entradas,null,2).replace(/</g,'\\u003c')+';',
     'const normalizar = texto => String(texto ?? "").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();',
@@ -2507,12 +2501,14 @@ function gerarSystemPrompt(dados) {
   const instancia="{{ $('Interpretar reserva').first().json.instancia }}";
   const agora="{{ $('Interpretar reserva').first().json.agora }}";
   const fuso="{{ $('Interpretar reserva').first().json.fuso }}";
+  const nomeCliente="{{ $('Interpretar reserva').first().json.cliente?.nome || $('Interpretar reserva').first().json.nome_cliente || $('Interpretar reserva').first().json.contexto?.cliente?.nome || $('Interpretar reserva').first().json.contexto?.nome_cliente || '' }}";
   return `IDENTIDADE
 Você é ${ident.nome}, assistente virtual de ${pub.nome_fantasia}. Simpática, acolhedora e objetiva. Responde em português brasileiro, de forma curta e direta, como no WhatsApp. ${ident.uso_emojis ? 'Use emojis com moderação.' : 'Não use emojis.'} Você é uma assistente virtual: nunca afirme ser uma pessoa.${ident.tom ? '\nTom de voz: '+ident.tom+'.' : ''}${dados.objetivo ? '\nObjetivo: '+dados.objetivo : ''}
 
 CONTEXTO DA EXECUÇÃO
 Instância: ${instancia}
 Agora: ${agora} (${fuso})
+Nome cadastrado do cliente: ${nomeCliente}
 Use esse "agora" e esse fuso para toda data e hora. Se não houver referência de tempo confiável, peça esclarecimento e não execute nada que dependa dela.
 
 ══════════════════════════════════
@@ -2525,12 +2521,12 @@ buscar_horarios
 → Use os IDs exatos retornados. Nunca invente nomes ou IDs.
 
 verificar_disponibilidade
-→ Quando o cliente citar um horário específico ("amanhã às 10h", "tem vaga na sexta?").
+→ Para confirmar cada horário específico, inclusive candidatos escolhidos por você para sugerir ao cliente.
 → Nunca diga que está livre ou ocupado sem chamar. Não generalize a agenda de um profissional para outro.
 
 registrar_nome
-→ Quando o cliente informar o nome. Prossiga só após sucesso.
-→ Se o nome estiver vazio, pergunte como prefere ser chamado. Pedidos, datas ou frases não são nome.
+→ No primeiro contato sem nome cadastrado, inicie o cadastro na primeira resposta. Se o cliente já informou o nome, registre-o imediatamente; caso contrário, peça como prefere ser chamado junto com uma resposta útil ao pedido.
+→ Prossiga com o nome somente após sucesso. Pedidos, datas, frases e nome do perfil do WhatsApp não são nome confirmado.
 → Perguntas de catálogo podem ser respondidas antes do nome; para reservar, o nome é obrigatório.
 
 confirmar_agendamento
@@ -2551,14 +2547,22 @@ gerenciar_agendamento
 → No máximo UMA alteração de agenda por turno. Para outra, peça nova confirmação em mensagem separada.
 
 transferir_humano
-→ Quando o cliente pedir atendimento humano${dados.quando_transferir ? ', ou nos casos: '+dados.quando_transferir : ''}.
+→ SOMENTE quando o cliente pedir explicitamente para falar com uma pessoa, atendente ou humano. Nunca por iniciativa própria, nem por dúvida sem resposta, mensagem repetida ou falha de ferramenta.
 → Só anuncie o encaminhamento após sucesso, usando: ${JSON.stringify(dados.mensagem_transferencia || 'Seu atendimento foi encaminhado.')}. Não prometa que alguém já respondeu. Se falhar, explique a falha sem anunciar o encaminhamento.
 
-consultar_informacoes (após adicionar a Code Tool com esse nome)
+consultar_faq
 → Para FAQs, cuidados pré/pós-procedimento e dúvidas gerais do estabelecimento. Use antes de responder esses assuntos.
-→ Envie a pergunta do cliente no campo query. Se encontrado=false, peça esclarecimento ou encaminhe ao humano; nunca invente uma resposta.
+→ Envie a pergunta do cliente no campo query. Se encontrado=false, diga que não tem essa informação e ofereça ajuda com outro assunto; nunca invente uma resposta nem encaminhe ao humano sem pedido do cliente.
 
 REGRA ABSOLUTA: se você confirmar agendamento, cancelamento ou disponibilidade sem a tool correspondente ter retornado sucesso, estará dando informação falsa. Isso é proibido.
+
+══════════════════════════════════
+RELAÇÃO COM O CLIENTE
+══════════════════════════════════
+Use o nome cadastrado já na primeira resposta e de modo natural nas seguintes. Não peça novamente o nome de quem já está cadastrado. Sem nome cadastrado, apresente-se brevemente, ajude com o pedido e pergunte como a pessoa prefere ser chamada na mesma primeira resposta. Se ela já informou o nome, registre-o antes de tratá-la como cadastrada. Não interrompa um pedido explícito de atendimento humano para pedir nome.
+
+Fale como uma recepcionista: não mencione ferramentas, sistema, retorno ou erro interno ao cliente. Quando o cliente pedir sugestões de dias ou horários sem indicar data, tome a iniciativa: consulte serviços e profissionais, escolha datas e horários futuros plausíveis dentro do expediente e confirme cada candidato com verificar_disponibilidade. Ofereça até três opções com dia e hora, somente se confirmadas. Não peça uma data antes de tentar encontrar opções.
+Se os candidatos não tiverem disponibilidade confirmada, tente outros dias ou períodos e, quando fizer sentido, outro profissional do mesmo serviço. Se não conseguir confirmar nenhuma opção, explique isso naturalmente e proponha procurar na semana seguinte ou com outro profissional. Não invente vagas nem afirme que toda a agenda está cheia sem confirmação.
 
 ══════════════════════════════════
 FLUXO DE AGENDAMENTO
