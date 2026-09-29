@@ -463,15 +463,17 @@ input[aria-invalid=true]{outline:2px solid #ae392f}input[readonly]{background:#e
 <!-- Hidden file input for draft -->
 <input type="file" id="file-input-draft" accept=".txt,.json,text/plain,application/json" style="display:none">
 
+<script src="pdf-lib.min.js"></script>
+<script src="contrato-pdf.js"></script>
 <script>
 // ============================================================
 // MODELO DE DADOS
 // ============================================================
 
 const PLANOS = [
-  { codigo: "solo", nome: "Solo", preco_centavos: 9900, max_profissionais: 1, max_recepcionistas: 0 },
-  { codigo: "equipe", nome: "Equipe", preco_centavos: 14900, max_profissionais: 5, max_recepcionistas: 1 },
-  { codigo: "empresa", nome: "Empresa", preco_centavos: 29900, max_profissionais: 15, max_recepcionistas: 2 },
+  { codigo: "solo", nome: "Solo", preco_centavos: 9900, implantacao_centavos: 9900, anuidade_centavos: 99900, max_profissionais: 1, max_recepcionistas: 0 },
+  { codigo: "equipe", nome: "Equipe", preco_centavos: 14900, implantacao_centavos: 14900, anuidade_centavos: 149900, max_profissionais: 5, max_recepcionistas: 1 },
+  { codigo: "empresa", nome: "Empresa", preco_centavos: 29900, implantacao_centavos: 29900, anuidade_centavos: 299900, max_profissionais: 15, max_recepcionistas: 2 },
 ];
 
 const DIAS_SEMANA = ["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"];
@@ -516,6 +518,7 @@ function createEmptyState() {
     },
     plano_codigo: "",
     admin: { nome: "", email: "", telefone: "" },
+    contrato: { modalidade: "", signatario_nome: "", signatario_cpf: "", signatario_cargo: "", signatario_email: "", meio_pagamento: "", canal_suporte: "" },
     profissionais: [],
     recepcionistas: [],
     servicos: [],
@@ -817,6 +820,8 @@ function renderStepEmpresa(container) {
             <button class="plan-card${state.plano_codigo === p.codigo ? " plan-selected" : ""}" data-plano="${p.codigo}">
               <h3>${p.nome}</h3>
               <p class="plan-price">${formatBRL(p.preco_centavos)}/mês</p>
+              <p class="plan-limit">Implantação mensal: ${formatBRL(p.implantacao_centavos)} (uma vez)</p>
+              <p class="plan-limit">Ou ${formatBRL(p.anuidade_centavos)}/ano com implantação gratuita</p>
               <p class="plan-limit">Até ${p.max_profissionais} profissional(is)</p>
               <p class="plan-limit">${p.max_recepcionistas > 0 ? `Até ${p.max_recepcionistas} recepcionista(s)` : "Sem recepcionista"}</p>
             </button>
@@ -2601,6 +2606,9 @@ Se uma tool retornar erro, explique a mensagem de negócio de forma natural e pe
 }
 function renderStepRevisao(container) {
   const errors=validar();let data=null;
+  const contrato=state.contrato;
+  if(!contrato.signatario_nome)contrato.signatario_nome=state.admin.nome;
+  if(!contrato.signatario_email)contrato.signatario_email=state.admin.email;
   if(!errors.length)data=gerarJSONFinal();
   const previews=data?[
     ['provisionamento',JSON.stringify(data.provisionamento,null,2)],
@@ -2609,9 +2617,12 @@ function renderStepRevisao(container) {
   ]:[];
   container.innerHTML='<h2>Revisão e saída</h2><p>Confira o cadastro antes de salvar. Nenhum provisionamento é executado aqui.</p>'+
     (errors.length?'<div class="alert alert-danger">Há pendências. Toque em uma para corrigir.</div>'+STEPS.slice(0,5).map((name,step)=>{const group=errors.map((e,i)=>({...e,i})).filter(e=>e.step===step);return group.length?'<fieldset class="form-section"><legend>'+escapeHtml(name)+'</legend>'+group.map(e=>'<button class="error-link" data-error="'+e.i+'">'+escapeHtml(e.msg)+'</button>').join('')+'</fieldset>':'';}).join(''):'<div class="alert alert-info">Cadastro validado. Salve cada arquivo na pasta desejada. No iPad, escolha “Salvar em Arquivos” no menu de compartilhamento.</div>')+
+    '<fieldset class="form-section"><legend>Contrato para assinatura</legend><p>Confira os dados do representante. O PDF gerado ainda não registra assinatura nem aceite.</p><div class="form-row"><div class="form-field"><label class="form-label" for="contrato-modalidade">Cobrança *</label><select class="form-select" id="contrato-modalidade" data-contract="modalidade"><option value="">Selecione</option><option value="mensal"'+(contrato.modalidade==='mensal'?' selected':'')+'>Mensal</option><option value="anual"'+(contrato.modalidade==='anual'?' selected':'')+'>Anual</option></select></div><div class="form-field"><label class="form-label" for="contrato-meio">Meio de pagamento *</label><input class="form-input" id="contrato-meio" data-contract="meio_pagamento" value="'+escapeHtml(contrato.meio_pagamento)+'" placeholder="Ex.: cartão, PIX ou boleto"></div></div><div class="form-row"><div class="form-field"><label class="form-label" for="contrato-nome">Nome de quem assinará *</label><input class="form-input" id="contrato-nome" data-contract="signatario_nome" value="'+escapeHtml(contrato.signatario_nome)+'"></div><div class="form-field"><label class="form-label" for="contrato-cpf">CPF de quem assinará *</label><input class="form-input" id="contrato-cpf" inputmode="numeric" data-contract="signatario_cpf" value="'+escapeHtml(contrato.signatario_cpf)+'" placeholder="Somente números"></div></div><div class="form-row"><div class="form-field"><label class="form-label" for="contrato-cargo">Cargo ou vínculo com a empresa *</label><input class="form-input" id="contrato-cargo" data-contract="signatario_cargo" value="'+escapeHtml(contrato.signatario_cargo)+'" placeholder="Ex.: titular ou sócio administrador"></div><div class="form-field"><label class="form-label" for="contrato-email">E-mail do signatário *</label><input class="form-input" id="contrato-email" type="email" data-contract="signatario_email" value="'+escapeHtml(contrato.signatario_email)+'"></div></div><div class="form-field"><label class="form-label" for="contrato-suporte">Canal de suporte e cancelamento *</label><input class="form-input" id="contrato-suporte" data-contract="canal_suporte" value="'+escapeHtml(contrato.canal_suporte)+'" placeholder="E-mail ou outro canal eletrônico"></div><button class="btn btn-primary" id="btn-generate-contract" '+(errors.length?'disabled':'')+'>Gerar contrato PDF</button><span class="form-hint">O arquivo será salvo ou compartilhado no iPad. O envio e a assinatura eletrônica serão etapas separadas.</span></fieldset>'+
     '<div class="actions"><button class="btn btn-primary" id="btn-save-provisionamento" '+(errors.length?'disabled':'')+'>Salvar provisionamento JSON</button><button class="btn btn-secondary" id="btn-save-faq" '+(errors.length?'disabled':'')+'>Salvar FAQ JS</button><button class="btn btn-secondary" id="btn-save-prompt" '+(errors.length?'disabled':'')+'>Salvar system prompt TXT</button><button class="btn btn-secondary" id="btn-save-html">Salvar resumo HTML</button></div>'+
     previews.map(([key,value])=>'<fieldset class="form-section"><legend>'+escapeHtml(key)+'</legend><textarea readonly class="form-textarea json-preview" id="json-'+key+'">'+escapeHtml(value)+'</textarea><button class="btn btn-secondary" data-copy="'+key+'">Copiar bloco</button></fieldset>').join('');
   container.querySelectorAll('[data-error]').forEach(b=>b.onclick=()=>focusError(errors[+b.dataset.error]));
+  container.querySelectorAll('[data-contract]').forEach(el=>{el.oninput=el.onchange=()=>{contrato[el.dataset.contract]=el.value;};});
+  $('#btn-generate-contract').onclick=exportarContratoPdf;
   $('#btn-save-provisionamento').onclick=()=>exportArtifact('provisionamento');
   $('#btn-save-faq').onclick=()=>exportArtifact('faq');
   $('#btn-save-prompt').onclick=()=>exportArtifact('system-prompt');
@@ -2619,6 +2630,34 @@ function renderStepRevisao(container) {
   container.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{const el=document.getElementById('json-'+b.dataset.copy);el.focus();el.select();try{if(!navigator.clipboard)throw Error();await navigator.clipboard.writeText(el.value);notice('Bloco copiado.');}catch{notice('Texto selecionado. Use Copiar no menu do navegador.');}});
 }
 function notice(message){let n=document.getElementById('file-status');if(n)n.textContent=message;}
+async function exportarContratoPdf(){
+  const pendencias=validar();
+  const e=state.empresa,c=state.contrato,campos=[];
+  if(pendencias.length){notice('Corrija as pendências do cadastro antes de gerar o contrato.');return false;}
+  if(!e.razao_social.trim())campos.push('razão social');
+  if(!/^(?:\d{11}|\d{14})$/.test(e.documento.replace(/\D/g,'')))campos.push('CPF/CNPJ da empresa');
+  if(!e.endereco.trim()||!e.cidade.trim()||!e.uf.trim()||!e.cep.trim())campos.push('endereço completo da empresa');
+  if(!['mensal','anual'].includes(c.modalidade))campos.push('forma de cobrança');
+  if(!c.signatario_nome.trim())campos.push('nome do signatário');
+  if(!/^\d{11}$/.test(c.signatario_cpf.replace(/\D/g,'')))campos.push('CPF do signatário');
+  if(!c.signatario_cargo.trim())campos.push('cargo ou vínculo do signatário');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.signatario_email.trim()))campos.push('e-mail do signatário');
+  if(!c.meio_pagamento.trim())campos.push('meio de pagamento');
+  if(!c.canal_suporte.trim())campos.push('canal de suporte e cancelamento');
+  if(campos.length){showModal('Dados para o contrato','Preencha ou corrija: '+campos.join(', ')+'.',()=>{},'Entendi');return false;}
+  const botao=$('#btn-generate-contract');botao.disabled=true;notice('Gerando contrato PDF...');
+  try{
+    const blob=await window.gerarContratoPdf(state,getPlano(state.plano_codigo),$('#brand-logo').src);
+    const name=fileName('contrato-para-assinatura','pdf');
+    const file=new File([blob],name,{type:'application/pdf'});
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file]});notice('Contrato PDF compartilhado. Ele ainda precisa ser assinado e aceito.');return true;}
+      catch(error){if(error.name==='AbortError'){notice('Compartilhamento cancelado.');return false;}}
+    }
+    downloadBlob(file,name);notice('Contrato PDF gerado. Confira o arquivo salvo; ele ainda precisa ser assinado e aceito.');return true;
+  }catch(error){showModal('Não foi possível gerar o contrato',error.message||'Confira a conexão e tente novamente.',()=>{},'Entendi');return false;}
+  finally{botao.disabled=false;}
+}
 function fileName(kind,ext){return 'agenda24h-'+kind+'-'+(generateSlug(state.empresa.codigo||state.empresa.nome_fantasia)||'cliente')+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.'+ext;}
 function downloadBlob(blob,filename){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);}
 async function deliverFile(content,name,type,share=false){
@@ -2681,6 +2720,7 @@ function parseDraft(text){
   out.horarios_profissionais={};for(const [key,h]of Object.entries(data.horarios_profissionais)){if(!safeKey(key)||!object(h)||typeof h.herda!=='boolean'||!out.profissionais.some(p=>p.chave===key))throw Error('Horário profissional inválido.');out.horarios_profissionais[key]={herda:h.herda,dias:h.herda?[]:days(h.dias,raw.versao_rascunho==='1.0.0')};}
   out.vinculos=list(data.vinculos,'vínculos').map(v=>fields(v,{profissional_chave:'',servico_chave:''},'vínculo'));
   out.ia.faqs=list(data.ia.faqs,'FAQs').map(f=>({...fields(f,{pergunta:'',resposta:''},'FAQ'),_open:f._open===true}));
+  out.contrato=data.contrato?fields(data.contrato,base.contrato,'contrato'):base.contrato;
   out.identificador=raw.tipo_arquivo?raw.identificador:uid();out.etapa_atual=step;out.versao_rascunho=APP_VERSION;out.codigo_sufixo=typeof data.codigo_sufixo==='string'?data.codigo_sufixo:generateShortCode();syncAdmin(out);return out;
 }
 function openDraft(file){
