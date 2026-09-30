@@ -1,4 +1,4 @@
-/* Geração local de minuta PDF. Assinatura e registro de aceite são etapas posteriores. */
+/* Geração local do contrato PDF. */
 (function () {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
   // Papel ofício brasileiro: 216 x 330 mm.
@@ -77,8 +77,8 @@
 
   async function render(template, logoSrc) {
     const pdf = await PDFDocument.create();
-    pdf.setTitle('Contrato Agenda 24h - para assinatura');
-    pdf.setSubject('Minuta gerada pelo onboarding, sem registro de assinatura ou aceite');
+    pdf.setTitle('Contrato Agenda 24h');
+    pdf.setSubject('Contrato gerado pelo onboarding');
     const regular = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
     const imageResponse = await fetch(logoSrc, { cache: 'no-store' });
@@ -135,9 +135,6 @@
     }
     drawLines('CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TECNOLOGIA E AUTOMAÇÃO - AGENDA 24H',
       { size: 14, leading: 19, bold: true, color: GREEN, after: 12 });
-    page.drawText('MINUTA PARA ASSINATURA - SEM REGISTRO DE ACEITE',
-      { x: MARGIN, y, font: bold, size: 10, color: GREEN });
-    y -= 20;
 
     const lines = template.split(/\r?\n/);
     for (let i=0; i<lines.length; i++) {
@@ -200,7 +197,7 @@
     const pages = pdf.getPages();
     pages.forEach((item,index) => {
       item.drawLine({start:{x:MARGIN,y:32},end:{x:PAGE_WIDTH-MARGIN,y:32},thickness:0.5,color:GREEN});
-      item.drawText('AGENDA 24H  |  CONTRATO PARA ASSINATURA',
+      item.drawText('AGENDA 24H  |  CONTRATO',
         {x:MARGIN,y:20,font:regular,size:9,color:GREEN});
       item.drawText(`Página ${index+1} de ${pages.length}`,
         {x:PAGE_WIDTH-MARGIN-62,y:20,font:regular,size:9,color:GREEN});
