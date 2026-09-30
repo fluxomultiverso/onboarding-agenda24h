@@ -1,8 +1,9 @@
 /* Geração local de minuta PDF. Assinatura e registro de aceite são etapas posteriores. */
 (function () {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
-  const PAGE_WIDTH = 595.28;
-  const PAGE_HEIGHT = 841.89;
+  // Papel ofício brasileiro: 216 x 330 mm.
+  const PAGE_WIDTH = 612.28;
+  const PAGE_HEIGHT = 935.43;
   const MARGIN = 48;
   const GREEN = rgb(0.14, 0.28, 0.21);
   const LIGHT = rgb(0.92, 0.96, 0.92);
@@ -44,8 +45,8 @@
       ['[MEIO]', c.meio_pagamento.trim()],
       ['[E-MAIL OU OUTRO CANAL ELETRÔNICO]', c.canal_suporte.trim()],
       ['[LOCAL]', city],
-      ['[NOME E ASSINATURA]', `${c.signatario_nome.trim()} - assinatura pendente`],
-      ['[ASSINATURA]', 'assinatura pendente'],
+      ['[NOME E ASSINATURA]', c.signatario_nome.trim()],
+      ['[ASSINATURA]', ''],
     ];
     let result = template;
     for (const [key, value] of replacements) result = result.replaceAll(key, value);
@@ -74,14 +75,18 @@
     return lines;
   }
 
-  async function render(template, logoSrc, planName) {
+  async function render(template, logoSrc) {
     const pdf = await PDFDocument.create();
     pdf.setTitle('Contrato Agenda 24h - para assinatura');
     pdf.setSubject('Minuta gerada pelo onboarding, sem registro de assinatura ou aceite');
     const regular = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
     let logo = null;
-    try { logo = await pdf.embedJpg(logoSrc); } catch { /* Texto e identidade visual permanecem legíveis. */ }
+    try {
+      const imageResponse = await fetch(logoSrc);
+      if (!imageResponse.ok) throw new Error('Logotipo indisponível');
+      logo = await pdf.embedPng(await imageResponse.arrayBuffer());
+    } catch { /* Texto e identidade visual permanecem legíveis. */ }
     let page, y;
     const newPage = () => { page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]); y = PAGE_HEIGHT - MARGIN; };
     const ensure = height => { if (y - height < MARGIN + 14) newPage(); };
@@ -98,9 +103,17 @@
       }
       y -= options.after || 0;
     };
+    const drawSignature = (value, label) => {
+      ensure(122);
+      drawLines(value, { bold: true, after: 0 });
+      y -= 58;
+      page.drawLine({ start: { x: MARGIN, y }, end: { x: MARGIN + 265, y }, thickness: 0.7, color: INK });
+      y -= 17;
+      drawLines(label, { size: 10, after: 16 });
+    };
     newPage();
     if (logo) {
-      const width = 57;
+      const width = 90;
       page.drawImage(logo, { x: (PAGE_WIDTH - width)/2, y: y-width, width, height: width });
       y -= width + 18;
     }
@@ -151,9 +164,18 @@
       }
       if (line.startsWith('## ')) {
         const heading = line.slice(3);
+        if (heading.startsWith('CLÁUSULA 1 ')) newPage();
         ensure(55);
         y -= 12;
         drawLines(heading,{bold:true,color:GREEN,after:6});
+        continue;
+      }
+      if (line.startsWith('**CONTRATANTE:**') && !line.includes('doravante')) {
+        drawSignature(line, 'Assinatura da CONTRATANTE');
+        continue;
+      }
+      if (line.startsWith('**CONTRATADA:**') && !line.includes('doravante')) {
+        drawSignature(line, 'Assinatura da CONTRATADA');
         continue;
       }
       drawLines(line,{after:8});
@@ -174,6 +196,6 @@
     const response = await fetch(new URL('contrato-template.md', document.baseURI), { cache: 'no-store' });
     if (!response.ok) throw new Error('O modelo do contrato não está disponível nesta página.');
     const template = fillTemplate(await response.text(), state, plan);
-    return render(template, logoSrc, plan.nome);
+    return render(template, logoSrc);
   };
 })();
