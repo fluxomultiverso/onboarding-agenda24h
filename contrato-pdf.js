@@ -81,14 +81,19 @@
     pdf.setSubject('Minuta gerada pelo onboarding, sem registro de assinatura ou aceite');
     const regular = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-    let logo = null;
-    try {
-      const imageResponse = await fetch(logoSrc);
-      if (!imageResponse.ok) throw new Error('Logotipo indisponível');
-      logo = await pdf.embedPng(await imageResponse.arrayBuffer());
-    } catch { /* Texto e identidade visual permanecem legíveis. */ }
+    const imageResponse = await fetch(logoSrc, { cache: 'no-store' });
+    if (!imageResponse.ok) throw new Error('O logotipo do contrato não está disponível. Atualize a página e tente novamente.');
+    const logo = await pdf.embedPng(await imageResponse.arrayBuffer());
     let page, y;
-    const newPage = () => { page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]); y = PAGE_HEIGHT - MARGIN; };
+    const newPage = () => {
+      page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      y = PAGE_HEIGHT - MARGIN;
+      if (pdf.getPageCount() > 1) {
+        const width = 62;
+        page.drawImage(logo, { x: (PAGE_WIDTH - width) / 2, y: y - width, width, height: width });
+        y -= width + 18;
+      }
+    };
     const ensure = height => { if (y - height < MARGIN + 14) newPage(); };
     const drawLines = (value, options = {}) => {
       const size = options.size || 12;
