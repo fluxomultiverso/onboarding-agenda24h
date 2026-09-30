@@ -103,13 +103,24 @@
       }
       y -= options.after || 0;
     };
-    const drawSignature = (value, label) => {
-      ensure(122);
-      drawLines(value, { bold: true, after: 0 });
-      y -= 58;
-      page.drawLine({ start: { x: MARGIN, y }, end: { x: MARGIN + 265, y }, thickness: 0.7, color: INK });
-      y -= 17;
-      drawLines(label, { size: 10, after: 16 });
+    const signatures = {};
+    const drawSignatures = () => {
+      ensure(125);
+      const gap = 16;
+      const width = (PAGE_WIDTH - 2 * MARGIN - gap) / 2;
+      const columns = [MARGIN, MARGIN + width + gap];
+      const lineY = y - 68;
+      ['contratante', 'contratada'].forEach((party, index) => {
+        const x = columns[index];
+        const center = x + width / 2;
+        const name = printable(signatures[party]);
+        const size = Math.min(10, 10 * (width - 8) / bold.widthOfTextAtSize(name, 10));
+        page.drawLine({ start: { x: x + 3, y: lineY }, end: { x: x + width - 3, y: lineY }, thickness: 0.7, color: INK });
+        page.drawText(name, { x: center - bold.widthOfTextAtSize(name, size) / 2, y: lineY - 17, font: bold, size, color: INK });
+        const label = 'assinatura';
+        page.drawText(label, { x: center - regular.widthOfTextAtSize(label, 9) / 2, y: lineY - 32, font: regular, size: 9, color: INK });
+      });
+      y = lineY - 48;
     };
     newPage();
     if (logo) {
@@ -171,15 +182,16 @@
         continue;
       }
       if (line.startsWith('**CONTRATANTE:**') && !line.includes('doravante')) {
-        drawSignature(line, 'Assinatura da CONTRATANTE');
+        signatures.contratante = line;
         continue;
       }
       if (line.startsWith('**CONTRATADA:**') && !line.includes('doravante')) {
-        drawSignature(line, 'Assinatura da CONTRATADA');
+        signatures.contratada = line;
         continue;
       }
       drawLines(line,{after:8});
     }
+    if (signatures.contratante && signatures.contratada) drawSignatures();
     const pages = pdf.getPages();
     pages.forEach((item,index) => {
       item.drawLine({start:{x:MARGIN,y:32},end:{x:PAGE_WIDTH-MARGIN,y:32},thickness:0.5,color:GREEN});
