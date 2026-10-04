@@ -978,7 +978,7 @@
     },
     {
       "parameters": {
-        "description": "Use somente quando a mensagem atual do cliente pedir explicitamente para falar com uma pessoa ou atendente. Se a ferramenta recusar, não diga que transferiu.",
+        "description": "Use quando o cliente pedir para falar com uma pessoa (inclusive atendente, responsável ou gerente) ou aceitar uma oferta clara de transferência no contexto da conversa. Se a ferramenta recusar, não diga que transferiu.",
         "workflowId": {
           "__rl": true,
           "value": "dTJHro2LSKKWemEh",
