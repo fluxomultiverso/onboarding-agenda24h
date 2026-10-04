@@ -1,0 +1,1631 @@
+{
+  "name": "WF1 - Principal Agenda24h V3 - Base corrigida",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "salaoexemplar-v3-homologacao",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5ad75daf-6e43-49fb-b2ac-dbf900567fb2",
+      "name": "Webhook Evolution",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2528,
+        160
+      ],
+      "webhookId": "0cb7ed7c-0ca2-4cf3-b9e6-3965cd369ae5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "b15f7d25-dd8a-4147-85c4-38e486c01593",
+              "leftValue": "={{ $json.body?.event || \"\" }}",
+              "rightValue": "messages.upsert",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "42aae711-4933-44dd-8ce1-35405636fe74",
+              "leftValue": "={{ String($json.body?.data?.key?.remoteJid || \"\") }}",
+              "rightValue": "@s.whatsapp.net",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "0458bd02-9cf0-4541-8b38-164c123115c7",
+              "leftValue": "={{ String($json.body?.data?.key?.id || \"\") }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3baef697-41d0-40f9-9ed1-481da4443f56",
+      "name": "Mensagem Valida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2304,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"processado\", \"ok\": true }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "96d8b19f-0471-4f2f-9dc3-29261869ada8",
+      "name": "Responder 200 OK (Webhook)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -2080,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"ignorado\", \"ok\": true }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "1d79978d-44aa-47b8-8194-47c4eb78e13a",
+      "name": "Responder 200 OK (Invalido)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -2080,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$('Webhook Evolution').first().json.body||{};\nconst d=b.data||{}, m=d.message||{}, k=d.key||{};\nconst jid=String(k.remoteJid||''); const mt=String(d.messageType||'');\nconst texto=String(m.conversation||m.extendedTextMessage?.text||m.ephemeralMessage?.message?.extendedTextMessage?.text||'');\nconst tipo=mt==='audioMessage'?'audio':['conversation','extendedTextMessage'].includes(mt)?'texto':'outro';\nreturn [{json:{instancia:String(b.instance||'').trim(),evento:JSON.stringify({jid,message_id:String(k.id||''),tipo,from_me:k.fromMe===true,texto}),jid,message_id:String(k.id||''),tipo,from_me:k.fromMe===true}}];"
+      },
+      "id": "08cdeb45-cb48-408d-a465-837b6c8ca7db",
+      "name": "Normalizar evento V3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1856,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "dTJHro2LSKKWemEh",
+          "mode": "list",
+          "cachedResultName": "_guard_antiloop V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "instancia": "={{ $json.instancia }}",
+            "evento": "={{ $json.evento }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "instancia",
+              "displayName": "instancia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "evento",
+              "displayName": "evento",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -1632,
+        64
+      ],
+      "id": "24407ccc-9ec9-4091-bef9-852c2705c206",
+      "name": "Registrar evento - guard V3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$json.resultado||$json;\nreturn [{json:{...r,registrada:['registrada','transcrever'].includes(r.acao),audio:r.acao==='transcrever'}}];"
+      },
+      "id": "35116652-977b-485b-9a77-6e99815ee043",
+      "name": "Interpretar registro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1408,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "449099a2-8fce-4ff6-80b8-cea182ed9c21",
+              "leftValue": "={{ $json.registrada === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "02293d5e-0ad2-4b69-ae4b-fb2951c77dfc",
+      "name": "Mensagem registrada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1184,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "449099a2-8fce-4ff6-80b8-cea182ed9c21",
+              "leftValue": "={{ $json.audio === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "130b4ae1-f79c-45a3-938e-cbec5e8ceaef",
+      "name": "Precisa transcrever?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://evolution.multiverso360.com.br/chat/getBase64FromMediaMessage/' + encodeURIComponent($('Normalizar evento V3').first().json.instancia) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ { key: { id: $('Webhook Evolution').item.json.body.data.key.id, remoteJid: $('Webhook Evolution').item.json.body.data.key.remoteJid, fromMe: $('Webhook Evolution').item.json.body.data.key.fromMe } } }}"
+            },
+            {
+              "name": "convertToMp4",
+              "value": "={{ false }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -736,
+        48
+      ],
+      "id": "4992fe01-7b06-4063-968c-2d141f3901bd",
+      "name": "Buscar Audio (Evolution)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "J7noVZ600AuQZxF9",
+          "name": "Evolution API - Envio WhatsApp"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "base64",
+        "options": {
+          "fileName": "audio.ogg",
+          "mimeType": "={{ $json.mimetype || 'audio/ogg' }}"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -496,
+        32
+      ],
+      "id": "cf5e0bf6-148f-4770-ad20-162792a3a044",
+      "name": "Audio para Binário",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -304,
+        16
+      ],
+      "id": "9057263d-878a-4a72-b18b-55b896cbb0d7",
+      "name": "OpenAI - Transcrever Audio",
+      "credentials": {
+        "openAiApi": {
+          "id": "cqKdTTe6fmanGE2p",
+          "name": "OpenAI account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{text:''}}];"
+      },
+      "id": "f68d4aba-8337-4d51-81fb-9b8c5e0e62c0",
+      "name": "Áudio indisponível",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT public.a24_v3_audio($1::uuid,$2::text) AS resultado;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryReplacement": "={{ [$('Interpretar registro').first().json.mensagem_id, String($json.text || $json.content || '')] }}"
+        }
+      },
+      "id": "68dee111-d208-4a1a-a21c-32d10bc7b8c2",
+      "name": "Registrar transcrição V3",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "29a0uhPjJQJprKcr",
+          "name": "Postgres - Agenda24h Atendimento V3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "53412591-c1e5-42fe-b13e-05db3fc2b768",
+      "name": "Aguardar 5s (consolidar)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        112,
+        480
+      ],
+      "webhookId": "07e18786-f61d-4313-ab3f-438da18892de"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT public.a24_v3_reservar_evento($1::text,$2::uuid) AS resultado;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryReplacement": "={{ [$('Normalizar evento V3').first().json.instancia, $('Interpretar registro').first().json.mensagem_id] }}"
+        }
+      },
+      "id": "d153dee7-2a2e-4c5f-a935-55c5e6568d6e",
+      "name": "Reservar evento V3",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        304,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "29a0uhPjJQJprKcr",
+          "name": "Postgres - Agenda24h Atendimento V3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$json.resultado||{};\nconst uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nreturn [{json:{...r,pronto:r.pronto===true&&uuid.test(String(r.token||'')),alerta:r.alerta===true&&uuid.test(String(r.alerta_id||''))}}];"
+      },
+      "id": "38651531-c404-4a59-b4cf-e643f172b445",
+      "name": "Interpretar reserva",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "449099a2-8fce-4ff6-80b8-cea182ed9c21",
+              "leftValue": "={{ $json.alerta === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d83d25e1-c294-4a0f-a14d-285cd233209f",
+      "name": "Alerta operacional?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        752,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "449099a2-8fce-4ff6-80b8-cea182ed9c21",
+              "leftValue": "={{ $json.pronto === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d146da96-0390-41aa-80a8-4ae59243daa5",
+      "name": "Atendimento reservado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        976,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://evolution.multiverso360.com.br/message/sendText/' + encodeURIComponent($('Interpretar reserva').first().json.instancia) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $('Interpretar reserva').first().json.numero }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $('Interpretar reserva').first().json.texto }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        976,
+        352
+      ],
+      "id": "76a364d1-57b6-428a-b9b1-fdf59d3cbdc3",
+      "name": "Evolution - enviar alerta",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "J7noVZ600AuQZxF9",
+          "name": "Evolution API - Envio WhatsApp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT public.a24_v3_alerta_finalizar($1::uuid,$2::text) AS resultado;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryReplacement": "={{ [$('Interpretar reserva').first().json.alerta_id, String($json.key?.id || $json.data?.key?.id || '')] }}"
+        }
+      },
+      "id": "ba6c3028-87b8-4a76-bafe-6d2b6f526def",
+      "name": "Finalizar alerta V3",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        352
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "29a0uhPjJQJprKcr",
+          "name": "Postgres - Agenda24h Atendimento V3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "449099a2-8fce-4ff6-80b8-cea182ed9c21",
+              "leftValue": "={{ $json.nao_suportado === true || $json.falha_audio === true || $json.texto_longo === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "42bb117b-26a5-4567-a2dd-c45eb565db9a",
+      "name": "Formato não suportado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$('Interpretar reserva').first().json;\nconst output=r.falha_audio?'Não consegui transcrever o áudio. Por favor, envie sua solicitação por texto ou grave outro áudio.':r.texto_longo?'Sua mensagem é muito longa. Por favor, envie uma mensagem de texto mais curta ou um áudio.':'No momento, imagens, vídeos e outros arquivos não são suportados. Envie sua solicitação por texto ou áudio.';\nreturn [{json:{output}}];"
+      },
+      "id": "6fe05b6e-9b80-4d4a-a628-6d56df0caac8",
+      "name": "Avisar formato não suportado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Interpretar reserva').first().json.mensagem }}",
+        "options": {
+          "systemMessage": "=Dados da empresa: {{ JSON.stringify($('Interpretar reserva').first().json.contexto || {}) }}\nCadastro do cliente: {{ JSON.stringify({nome: $('Interpretar reserva').first().json.nome || $('Interpretar reserva').first().json.cliente?.nome || $('Interpretar reserva').first().json.nome_cliente || $('Interpretar reserva').first().json.contexto?.cliente?.nome || $('Interpretar reserva').first().json.contexto?.nome_cliente || null, status: $('Interpretar reserva').first().json.cliente?.status_cadastro || $('Interpretar reserva').first().json.contexto?.cliente?.status_cadastro || null}) }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        1616,
+        512
+      ],
+      "id": "491ee23b-681e-4302-82de-a69260c56011",
+      "name": "AI Agent",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-6-luna",
+          "mode": "list",
+          "cachedResultName": "gpt-6-luna"
+        },
+        "options": {
+          "extraBody": "{\n  \"reasoning_effort\": \"none\"\n}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1184,
+        736
+      ],
+      "id": "3a652e88-9411-40df-847f-0910d590dcf7",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "cqKdTTe6fmanGE2p",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "=memoria:v3:{{ $('Interpretar reserva').first().json.instancia }}:{{ $('Interpretar reserva').first().json.jid }}",
+        "sessionTTL": 86400,
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
+      "typeVersion": 1.6,
+      "position": [
+        1328,
+        800
+      ],
+      "id": "b6020bed-1be8-4cb2-87c6-569efa2e3406",
+      "name": "Redis Chat Memory",
+      "credentials": {
+        "redis": {
+          "id": "sHWohIPVJfWBEkIK",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Consulte serviços, profissionais, preços e horários reais.",
+        "workflowId": {
+          "__rl": true,
+          "value": "W22Af2tz6ohlLKSK",
+          "mode": "list",
+          "cachedResultName": "_tool_buscarhorarios V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $('Interpretar reserva').first().json.token }}",
+            "dados": "={{ JSON.stringify({}) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dados",
+              "displayName": "dados",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1472,
+        736
+      ],
+      "id": "a786ee23-84b6-442b-9629-3a4401cbaa29",
+      "name": "_tool_buscarhorarios V3"
+    },
+    {
+      "parameters": {
+        "description": "Confirme a disponibilidade de horário com IDs reais.",
+        "workflowId": {
+          "__rl": true,
+          "value": "CFF2urS5U2zEw9h5",
+          "mode": "list",
+          "cachedResultName": "_tool_verificardisponibilidade V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $('Interpretar reserva').first().json.token }}",
+            "dados": "={{ JSON.stringify({servico_id:$fromAI('servico_id','UUID do serviço consultado','string'),profissional_id:$fromAI('profissional_id','UUID do profissional consultado','string'),inicio_em:$fromAI('inicio_em','Horário ISO 8601 completo','string')}) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dados",
+              "displayName": "dados",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        848
+      ],
+      "id": "d53e9c9e-a212-44c0-9ef2-984e651a295d",
+      "name": "_tool_verificardisponibilidade V3"
+    },
+    {
+      "parameters": {
+        "name": "confirmar_agendamento",
+        "description": "Crie reserva só após confirmação explícita.",
+        "workflowId": {
+          "__rl": true,
+          "value": "1e54liRBtilTT8wm",
+          "mode": "list",
+          "cachedResultName": "_tool_agendarhorario V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $('Interpretar reserva').first().json.token }}",
+            "dados": "={{ JSON.stringify({servico_id:$fromAI('servico_id','UUID do serviço confirmado','string'),profissional_id:$fromAI('profissional_id','UUID do profissional confirmado','string'),inicio_em:$fromAI('inicio_em','Horário ISO 8601 completo confirmado','string'),confirmado:$fromAI('confirmado','Booleano true após confirmação explícita','boolean')}) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dados",
+              "displayName": "dados",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        736
+      ],
+      "id": "f76db397-48ec-4376-8d53-d6fc7cc8ce68",
+      "name": "_tool_agendarhorario V3"
+    },
+    {
+      "parameters": {
+        "description": "Liste reservas do cliente do token.",
+        "workflowId": {
+          "__rl": true,
+          "value": "NhcyRHp6CxQyC1Kg",
+          "mode": "list",
+          "cachedResultName": "_tool_meusagendamentos V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $('Interpretar reserva').first().json.token }}",
+            "dados": "={{ JSON.stringify({}) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dados",
+              "displayName": "dados",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1824,
+        816
+      ],
+      "id": "f5874de1-ec08-4c21-9d7f-86e1cf1ec1b9",
+      "name": "_tool_meusagendamentos V3"
+    },
+    {
+      "parameters": {
+        "description": "Cancele ou reagende pelo UUID retornado, após confirmação.",
+        "workflowId": {
+          "__rl": true,
+          "value": "YICVfAlnijFrgrfI",
+          "mode": "list",
+          "cachedResultName": "_tool_gerenciar_agendamento V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $('Interpretar reserva').first().json.token }}",
+            "dados": "={{ JSON.stringify({acao:$fromAI('acao','reagendar ou cancelar','string'),agendamento_id:$fromAI('agendamento_id','UUID obtido na lista de agendamentos','string'),inicio_em:$fromAI('inicio_em','Novo horário ISO 8601 para reagendamento','string'),confirmado:$fromAI('confirmado','Booleano true após confirmação explícita','boolean')}) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dados",
+              "displayName": "dados",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1952,
+        736
+      ],
+      "id": "f8714346-579e-4add-9cb3-360ad3018baf",
+      "name": "_tool_gerenciar_agendamento V3"
+    },
+    {
+      "parameters": {
+        "description": "Registre o nome informado pelo cliente.",
+        "workflowId": {
+          "__rl": true,
+          "value": "dTJHro2LSKKWemEh",
+          "mode": "list",
+          "cachedResultName": "_guard_antiloop V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $('Interpretar reserva').first().json.token }}",
+            "dados": "={{ JSON.stringify({acao:'nome',nome:$fromAI('nome','Nome informado pelo cliente','string')}) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dados",
+              "displayName": "dados",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        832
+      ],
+      "id": "f6e144ac-8fe8-4e86-ab47-0895ade09edb",
+      "name": "Registrar nome V3"
+    },
+    {
+      "parameters": {
+        "description": "Use somente quando a mensagem atual do cliente pedir explicitamente para falar com uma pessoa ou atendente. Se a ferramenta recusar, não diga que transferiu.",
+        "workflowId": {
+          "__rl": true,
+          "value": "dTJHro2LSKKWemEh",
+          "mode": "list",
+          "cachedResultName": "_guard_antiloop V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $('Interpretar reserva').first().json.token }}",
+            "dados": "={{ JSON.stringify({acao:'humano',mensagem:$('Interpretar reserva').first().json.mensagem}) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dados",
+              "displayName": "dados",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2208,
+        736
+      ],
+      "id": "bc5e7790-9e3e-4800-bc45-ec699fe7117a",
+      "name": "Transferir humano V3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT public.a24_v3_preparar_envio($1::uuid,$2::text) AS resultado;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryReplacement": "={{ [$('Interpretar reserva').first().json.token, String($json.output || '')] }}"
+        }
+      },
+      "id": "12b51771-b0ee-477c-a97e-0b15e26f53ec",
+      "name": "Preparar envio V3",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2128,
+        352
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "29a0uhPjJQJprKcr",
+          "name": "Postgres - Agenda24h Atendimento V3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$json.resultado||{};\nreturn [{json:{...r,enviar:r.enviar===true&&!!r.token&&!!r.jid}}];"
+      },
+      "id": "793ef726-2f89-4adc-9ebc-bbe6375392c5",
+      "name": "Interpretar preparo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2352,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "449099a2-8fce-4ff6-80b8-cea182ed9c21",
+              "leftValue": "={{ $json.enviar === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "281ada89-c82a-407d-bc2c-d983f14671ff",
+      "name": "Envio autorizado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2576,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://evolution.multiverso360.com.br/message/sendText/' + encodeURIComponent($('Interpretar preparo').first().json.instancia) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $('Interpretar preparo').first().json.jid }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $('Interpretar preparo').first().json.texto }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2800,
+        352
+      ],
+      "id": "9d08965e-fc79-46b7-b564-dc9640e60102",
+      "name": "Evolution - enviar resposta",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "d1FKH88e0LqiyrFZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT public.a24_v3_finalizar($1::uuid,$2::text) AS resultado;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryReplacement": "={{ [$('Interpretar preparo').first().json.token, String($json.key?.id || $json.data?.key?.id || '')] }}"
+        }
+      },
+      "id": "19a900f3-6edc-4851-93b1-a20ee9282a38",
+      "name": "Finalizar atendimento V3",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3024,
+        352
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "29a0uhPjJQJprKcr",
+          "name": "Postgres - Agenda24h Atendimento V3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Consulte esta ferramenta antes de responder dúvidas sobre a empresa, FAQ e orientações pré ou pós-atendimento. Envie a pergunta do cliente como entrada. Se a ferramenta não encontrar resposta, não invente informações.",
+        "jsCode": "// Code Tool: consultar_faq\n// Description: Consulte esta ferramenta antes de responder dúvidas sobre o estabelecimento, FAQ e orientações. Envie a pergunta do cliente. Se não encontrar resposta, não invente.\nconst faq = [];\nconst normalizar = texto => String(texto ?? \"\").normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").toLowerCase().replace(/[^a-z0-9]+/g, \" \").trim();\nconst ignorar = new Set([\"a\",\"o\",\"as\",\"os\",\"de\",\"da\",\"do\",\"das\",\"dos\",\"em\",\"na\",\"no\",\"para\",\"por\",\"um\",\"uma\",\"e\",\"eu\",\"voces\",\"qual\",\"quais\",\"como\",\"me\",\"pode\"]);\nconst palavras = texto => [...new Set(normalizar(texto).split(\" \").filter(p => p.length > 2 && !ignorar.has(p)))];\nconst pergunta = normalizar(query);\nif (!pergunta) return JSON.stringify({encontrado:false, mensagem:\"Pergunta não informada.\"});\nlet melhor = null; let nota = 0; let empatou = false;\nfor (const item of faq) {\n  const cadastrada = normalizar(item.pergunta);\n  const termos = palavras(item.pergunta);\n  const entrada = palavras(pergunta);\n  const comuns = termos.filter(t => entrada.some(p => p === t || (p.length > 4 && t.length > 4 && (p.startsWith(t) || t.startsWith(p))))).length;\n  const valor = cadastrada === pergunta ? 1 : comuns / Math.max(termos.length, entrada.length, 1);\n  if (valor > nota) { melhor = item; nota = valor; empatou = false; }\n  else if (valor > 0 && valor === nota && melhor && melhor.resposta !== item.resposta) empatou = true;\n}\nif (!melhor || nota < 0.5 || empatou) return JSON.stringify({encontrado:false, mensagem:\"Pergunta não cadastrada de forma inequívoca. Não invente uma resposta.\"});\nreturn JSON.stringify({encontrado:true, pergunta:melhor.pergunta, resposta:melhor.resposta});\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        1744,
+        1008
+      ],
+      "id": "2622f05b-8ca2-4c24-a725-eb58376ed12c",
+      "name": "consultar_faq"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Evolution": {
+      "main": [
+        [
+          {
+            "node": "Mensagem Valida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem Valida?": {
+      "main": [
+        [
+          {
+            "node": "Responder 200 OK (Webhook)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 200 OK (Invalido)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder 200 OK (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Normalizar evento V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar evento V3": {
+      "main": [
+        [
+          {
+            "node": "Registrar evento - guard V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar evento - guard V3": {
+      "main": [
+        [
+          {
+            "node": "Interpretar registro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpretar registro": {
+      "main": [
+        [
+          {
+            "node": "Mensagem registrada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem registrada?": {
+      "main": [
+        [
+          {
+            "node": "Precisa transcrever?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Precisa transcrever?": {
+      "main": [
+        [
+          {
+            "node": "Buscar Audio (Evolution)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aguardar 5s (consolidar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Audio (Evolution)": {
+      "main": [
+        [
+          {
+            "node": "Audio para Binário",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Áudio indisponível",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audio para Binário": {
+      "main": [
+        [
+          {
+            "node": "OpenAI - Transcrever Audio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Áudio indisponível",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - Transcrever Audio": {
+      "main": [
+        [
+          {
+            "node": "Registrar transcrição V3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Áudio indisponível",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Áudio indisponível": {
+      "main": [
+        [
+          {
+            "node": "Registrar transcrição V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar transcrição V3": {
+      "main": [
+        [
+          {
+            "node": "Aguardar 5s (consolidar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguardar 5s (consolidar)": {
+      "main": [
+        [
+          {
+            "node": "Reservar evento V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reservar evento V3": {
+      "main": [
+        [
+          {
+            "node": "Interpretar reserva",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpretar reserva": {
+      "main": [
+        [
+          {
+            "node": "Alerta operacional?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerta operacional?": {
+      "main": [
+        [
+          {
+            "node": "Evolution - enviar alerta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Atendimento reservado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution - enviar alerta": {
+      "main": [
+        [
+          {
+            "node": "Finalizar alerta V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atendimento reservado?": {
+      "main": [
+        [
+          {
+            "node": "Formato não suportado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formato não suportado?": {
+      "main": [
+        [
+          {
+            "node": "Avisar formato não suportado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar formato não suportado": {
+      "main": [
+        [
+          {
+            "node": "Preparar envio V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar envio V3": {
+      "main": [
+        [
+          {
+            "node": "Interpretar preparo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpretar preparo": {
+      "main": [
+        [
+          {
+            "node": "Envio autorizado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envio autorizado?": {
+      "main": [
+        [
+          {
+            "node": "Evolution - enviar resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution - enviar resposta": {
+      "main": [
+        [
+          {
+            "node": "Finalizar atendimento V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "_tool_buscarhorarios V3": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "_tool_verificardisponibilidade V3": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "_tool_agendarhorario V3": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "_tool_meusagendamentos V3": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "_tool_gerenciar_agendamento V3": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar nome V3": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transferir humano V3": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Preparar envio V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_faq": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}

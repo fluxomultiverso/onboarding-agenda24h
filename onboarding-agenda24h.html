@@ -2619,13 +2619,14 @@ function renderStepRevisao(container) {
     (errors.length?'<div class="alert alert-danger">Há pendências. Toque em uma para corrigir.</div>'+STEPS.slice(0,5).map((name,step)=>{const group=errors.map((e,i)=>({...e,i})).filter(e=>e.step===step);return group.length?'<fieldset class="form-section"><legend>'+escapeHtml(name)+'</legend>'+group.map(e=>'<button class="error-link" data-error="'+e.i+'">'+escapeHtml(e.msg)+'</button>').join('')+'</fieldset>':'';}).join(''):'<div class="alert alert-info">Cadastro validado. Salve cada arquivo na pasta desejada. No iPad, escolha “Salvar em Arquivos” no menu de compartilhamento.</div>')+
     '<fieldset class="form-section"><legend>Contrato</legend><p>Confira os dados do representante.</p><div class="form-row"><div class="form-field"><label class="form-label" for="contrato-modalidade">Cobrança *</label><select class="form-select" id="contrato-modalidade" data-contract="modalidade"><option value="">Selecione</option><option value="mensal"'+(contrato.modalidade==='mensal'?' selected':'')+'>Mensal</option><option value="anual"'+(contrato.modalidade==='anual'?' selected':'')+'>Anual</option></select></div><div class="form-field"><label class="form-label" for="contrato-meio">Meio de pagamento *</label><input class="form-input" id="contrato-meio" data-contract="meio_pagamento" value="'+escapeHtml(contrato.meio_pagamento)+'" placeholder="Ex.: cartão, PIX ou boleto"></div></div><div class="form-row"><div class="form-field"><label class="form-label" for="contrato-nome">Nome de quem assinará *</label><input class="form-input" id="contrato-nome" data-contract="signatario_nome" value="'+escapeHtml(contrato.signatario_nome)+'"></div><div class="form-field"><label class="form-label" for="contrato-cpf">CPF de quem assinará *</label><input class="form-input" id="contrato-cpf" inputmode="numeric" data-contract="signatario_cpf" value="'+escapeHtml(contrato.signatario_cpf)+'" placeholder="Somente números"></div></div><div class="form-row"><div class="form-field"><label class="form-label" for="contrato-cargo">Cargo ou vínculo com a empresa *</label><input class="form-input" id="contrato-cargo" data-contract="signatario_cargo" value="'+escapeHtml(contrato.signatario_cargo)+'" placeholder="Ex.: titular ou sócio administrador"></div><div class="form-field"><label class="form-label" for="contrato-email">E-mail do signatário *</label><input class="form-input" id="contrato-email" type="email" data-contract="signatario_email" value="'+escapeHtml(contrato.signatario_email)+'"></div></div><div class="form-field"><label class="form-label" for="contrato-suporte">Canal de suporte e cancelamento *</label><input class="form-input" id="contrato-suporte" data-contract="canal_suporte" value="'+escapeHtml(contrato.canal_suporte)+'" placeholder="E-mail ou outro canal eletrônico"></div><button class="btn btn-primary" id="btn-generate-contract" '+(errors.length?'disabled':'')+'>Gerar contrato PDF</button><span class="form-hint">O arquivo será salvo ou compartilhado no iPad.</span></fieldset>'+
     '<fieldset class="form-section"><legend>Provisionamento</legend><div class="form-field"><label class="form-label" for="provisionamento-webhook-url">URL de produção do webhook *</label><input class="form-input" id="provisionamento-webhook-url" type="url" inputmode="url" autocomplete="off" value="https://n8n.multiverso360.com.br/webhook/agenda24h/provisionamento/v13"></div><div class="form-field"><label class="form-label" for="provisionamento-chave">Chave de acesso ao webhook *</label><input class="form-input" id="provisionamento-chave" type="password" autocomplete="off" spellcheck="false"></div><button class="btn btn-primary" id="btn-provisionar" '+(errors.length?'disabled':'')+'>Provisionar</button><span class="form-hint">O envio ocorre somente ao tocar em Provisionar. A chave não é salva no cadastro.</span></fieldset>'+
-    '<div class="actions"><button class="btn btn-primary" id="btn-save-provisionamento" '+(errors.length?'disabled':'')+'>Salvar provisionamento JSON</button><button class="btn btn-secondary" id="btn-save-faq" '+(errors.length?'disabled':'')+'>Salvar FAQ TXT</button><button class="btn btn-secondary" id="btn-save-prompt" '+(errors.length?'disabled':'')+'>Salvar system prompt TXT</button><button class="btn btn-secondary" id="btn-save-html">Salvar resumo HTML</button></div>'+
+    '<div class="actions"><button class="btn btn-primary" id="btn-save-provisionamento" '+(errors.length?'disabled':'')+'>Salvar provisionamento JSON</button><button class="btn btn-primary" id="btn-save-workflow" '+(errors.length?'disabled':'')+'>Salvar workflow completo JSON</button><button class="btn btn-secondary" id="btn-save-faq" '+(errors.length?'disabled':'')+'>Salvar FAQ TXT</button><button class="btn btn-secondary" id="btn-save-prompt" '+(errors.length?'disabled':'')+'>Salvar system prompt TXT</button><button class="btn btn-secondary" id="btn-save-html">Salvar resumo HTML</button></div>'+
     previews.map(([key,value])=>'<fieldset class="form-section"><legend>'+escapeHtml(key)+'</legend><textarea readonly class="form-textarea json-preview" id="json-'+key+'">'+escapeHtml(value)+'</textarea><button class="btn btn-secondary" data-copy="'+key+'">Copiar bloco</button></fieldset>').join('');
   container.querySelectorAll('[data-error]').forEach(b=>b.onclick=()=>focusError(errors[+b.dataset.error]));
   container.querySelectorAll('[data-contract]').forEach(el=>{el.oninput=el.onchange=()=>{contrato[el.dataset.contract]=el.value;};});
   $('#btn-generate-contract').onclick=exportarContratoPdf;
   $('#btn-provisionar').onclick=iniciarProvisionamento;
   $('#btn-save-provisionamento').onclick=()=>exportArtifact('provisionamento');
+  $('#btn-save-workflow').onclick=()=>exportArtifact('workflow');
   $('#btn-save-faq').onclick=()=>exportArtifact('faq');
   $('#btn-save-prompt').onclick=()=>exportArtifact('system-prompt');
   $('#btn-save-html').onclick=()=>deliverFile(gerarResumoHTML(),fileName('resumo','html'),'text/html;charset=utf-8',false);
@@ -2681,6 +2682,22 @@ async function exportarContratoPdf(){
   finally{botao.disabled=false;}
 }
 function fileName(kind,ext){return 'agenda24h-'+kind+'-'+(generateSlug(state.empresa.codigo||state.empresa.nome_fantasia)||'cliente')+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.'+ext;}
+async function gerarWorkflowCompleto(data){
+  const response=await fetch(new URL('workflow-principal-base-corrigida.json',document.baseURI));
+  if(!response.ok)throw Error('Não foi possível carregar o workflow base.');
+  const workflow=await response.json();
+  const node=name=>workflow.nodes.find(n=>n.name===name);
+  const agent=node('AI Agent'),faq=node('consultar_faq'),webhook=node('Webhook Evolution');
+  if(!agent||!faq||!webhook||!agent.parameters.options?.systemMessage)throw Error('Workflow base incompleto.');
+  const contexto=agent.parameters.options.systemMessage;
+  agent.parameters.options.systemMessage='='+gerarSystemPrompt(data.criacao_system_prompt).trim()+'\n\n'+contexto.replace(/^=/,'');
+  faq.parameters.jsCode=gerarCodigoFAQ(data.criacao_system_prompt.faqs);
+  const codigo=data.provisionamento.empresa.codigo;
+  workflow.name='WF1 - Principal Agenda24h V3 - '+codigo;
+  webhook.parameters.path='agenda24h/'+codigo+'/v3';
+  webhook.webhookId=crypto.randomUUID();
+  return workflow;
+}
 function downloadBlob(blob,filename){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);}
 async function deliverFile(content,name,type,share=false){
   const blob=new Blob([content],{type});
@@ -2695,6 +2712,10 @@ async function exportArtifact(kind) {
     faq:{content:gerarCodigoFAQ(data.criacao_system_prompt.faqs),ext:'txt',type:'text/plain'},
     'system-prompt':{content:gerarSystemPrompt(data.criacao_system_prompt),ext:'txt',type:'text/plain'},
   };
+  if(kind==='workflow'){
+    try{artifacts.workflow={content:JSON.stringify(await gerarWorkflowCompleto(data),null,2)+'\n',ext:'json',type:'application/json'};}
+    catch(error){notice(error.message||'Não foi possível gerar o workflow.');return false;}
+  }
   const item=artifacts[kind];if(!item)throw Error('Tipo de arquivo inválido.');
   const name=fileName(kind,item.ext),file=new File([item.content],name,{type:item.type});
   if(window.showSaveFilePicker){
