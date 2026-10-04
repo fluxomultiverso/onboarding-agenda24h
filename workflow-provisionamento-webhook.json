@@ -1,0 +1,548 @@
+{
+  "name": "Provisionamento Agenda24h V13 - Webhook onboarding",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agenda24h/provisionamento/v13",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://onboarding.multiverso360.com.br"
+        }
+      },
+      "id": "e3ca7273-df28-4779-ae7a-513a231d8d99",
+      "name": "Receber provisionamento do onboarding",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        608
+      ],
+      "webhookId": "1910ce95-7942-4dab-829d-a3701493e4f0"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.body;\nlet payload;\ntry { payload = typeof raw === 'string' ? JSON.parse(raw.trim()) : raw; } catch (error) { throw new Error('JSON V2 inválido: ' + error.message); }\nif (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('O provisionamento deve ser um objeto JSON.');\nconst required = (value, field) => { if (value === undefined || value === null || String(value).trim() === '') throw new Error('Campo obrigatório: ' + field); return value; };\nconst email = (value, field) => { const result = String(required(value, field)).trim().toLowerCase(); if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(result)) throw new Error('E-mail inválido: ' + field); return result; };\nconst numeroPositivo = (value, field) => { const n = Number(value); if (!Number.isFinite(n) || n <= 0) throw new Error('Campo numérico inválido (deve ser um número maior que zero): ' + field); return n; };\nrequired(payload.empresa?.codigo, 'empresa.codigo');\nrequired(payload.empresa?.nome_fantasia, 'empresa.nome_fantasia');\nrequired(payload.empresa?.whatsapp_numero, 'empresa.whatsapp_numero');\nrequired(payload.empresa?.instancia_evolution, 'empresa.instancia_evolution');\nif (!['solo', 'equipe', 'empresa'].includes(String(payload.plano_codigo || '').toLowerCase())) throw new Error('plano_codigo deve ser solo, equipe ou empresa.');\nrequired(payload.admin?.nome, 'admin.nome');\npayload.admin.email = email(payload.admin?.email, 'admin.email');\nif (!Array.isArray(payload.profissionais) || payload.profissionais.length === 0) throw new Error('Informe ao menos um profissional.');\nif (!Array.isArray(payload.servicos) || payload.servicos.length === 0) throw new Error('Informe ao menos um serviço.');\nconst authAccounts = [{ chave: 'admin', tipo: 'administrador', nome: String(payload.admin.nome).trim(), email: payload.admin.email }];\nconst profissionalKeys = new Set();\nfor (const p of payload.profissionais) {\n  required(p.chave, 'profissionais[].chave');\n  required(p.nome, 'profissionais[].nome');\n  const chave = String(p.chave);\n  if (profissionalKeys.has(chave)) throw new Error('Chave de profissional repetida: ' + chave);\n  profissionalKeys.add(chave);\n  if (p.eh_admin !== undefined && typeof p.eh_admin !== 'boolean') throw new Error('eh_admin deve ser booleano.');\n  p.eh_admin = p.eh_admin === true;\n  if (p.eh_admin && p.email && String(p.email).trim().toLowerCase() !== payload.admin.email) throw new Error('O profissional administrador deve usar o e-mail do administrador.');\n  p.acesso_portal = !p.eh_admin && p.acesso_portal === true;\n  delete p.usuario_id;\n  if (p.acesso_portal) {\n    p.email = email(p.email, 'profissionais[].email quando acesso_portal for true');\n    authAccounts.push({ chave: 'profissional:' + chave, tipo: 'profissional', nome: String(p.nome).trim(), email: p.email });\n  }\n}\nif (payload.profissionais.filter(p => p.eh_admin).length > 1) throw new Error('Somente um profissional pode estar vinculado ao administrador.');\nif (payload.recepcionistas === undefined) payload.recepcionistas = [];\nif (!Array.isArray(payload.recepcionistas)) throw new Error('recepcionistas deve ser uma lista.');\nconst recepcionistaKeys = new Set();\nfor (const r of payload.recepcionistas) {\n  required(r.chave, 'recepcionistas[].chave');\n  required(r.nome, 'recepcionistas[].nome');\n  const chave = String(r.chave);\n  if (recepcionistaKeys.has(chave)) throw new Error('Chave de recepcionista repetida: ' + chave);\n  recepcionistaKeys.add(chave);\n  r.email = email(r.email, 'recepcionistas[].email');\n  r.papel = 'recepcionista';\n  r.acesso_portal = true;\n  delete r.usuario_id;\n  authAccounts.push({ chave: 'recepcionista:' + chave, tipo: 'recepcionista', nome: String(r.nome).trim(), email: r.email });\n}\nconst emails = authAccounts.map((account) => account.email);\nif (new Set(emails).size !== emails.length) throw new Error('Cada acesso do portal deve ter um e-mail diferente.');\nconst servicoKeys = new Set();\nfor (const s of payload.servicos) {\n  required(s.chave, 'servicos[].chave');\n  required(s.nome, 'servicos[].nome');\n  const chave = String(s.chave);\n  if (servicoKeys.has(chave)) throw new Error('Chave de serviço repetida: ' + chave);\n  servicoKeys.add(chave);\n  s.duracao_min = numeroPositivo(s.duracao_min, 'servicos[].duracao_min');\n  s.preco = numeroPositivo(s.preco, 'servicos[].preco');\n}\nif (!Array.isArray(payload.profissional_servicos) || payload.profissional_servicos.length === 0) throw new Error('Informe os vínculos profissional_servicos.');\nfor (const [i, v] of payload.profissional_servicos.entries()) {\n  if (!profissionalKeys.has(String(v.profissional_chave))) throw new Error('profissional_servicos[' + i + '].profissional_chave não corresponde a nenhum profissional cadastrado: ' + v.profissional_chave);\n  if (!servicoKeys.has(String(v.servico_chave))) throw new Error('profissional_servicos[' + i + '].servico_chave não corresponde a nenhum serviço cadastrado: ' + v.servico_chave);\n}\n// Validar os períodos semanais antes de qualquer criação de conta Auth.\nconst horarioSegundos = (value, field) => {\n  if (typeof value !== 'string' || !/^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$/.test(value)) throw new Error(field + ' deve ser horário válido HH:mm ou HH:mm:ss.');\n  const [h, m, s = 0] = value.split(':').map(Number);\n  return h * 3600 + m * 60 + s;\n};\nconst intervaloSemanal = (h, field) => {\n  if (!h || typeof h !== 'object' || Array.isArray(h)) throw new Error(field + ' deve ser objeto.');\n  if (!Number.isInteger(h.dia_semana) || h.dia_semana < 0 || h.dia_semana > 6) throw new Error(field + '.dia_semana deve ser inteiro de 0 (domingo) a 6 (sábado).');\n  if (typeof h.ativo !== 'boolean') throw new Error(field + '.ativo deve ser booleano.');\n  const inicio = horarioSegundos(h.inicio, field + '.inicio');\n  const fim = horarioSegundos(h.fim, field + '.fim');\n  if (inicio >= fim) throw new Error(field + ': o fim deve ser posterior ao início; turnos pela meia-noite não são aceitos.');\n  return {dia: h.dia_semana, inicio, fim, ativo: h.ativo};\n};\nif (!Array.isArray(payload.horarios_empresa) || payload.horarios_empresa.length === 0) throw new Error('Informe horarios_empresa.');\nconst expediente = payload.horarios_empresa.map((h, i) => intervaloSemanal(h, 'horarios_empresa[' + i + ']'));\nif (!expediente.some(h => h.ativo)) throw new Error('A empresa precisa ter ao menos um período semanal ativo.');\nif (!Array.isArray(payload.horarios_profissionais) || payload.horarios_profissionais.length === 0) throw new Error('Informe horarios_profissionais.');\nconst horariosPorProfissional = new Map();\nlet horariosAtivos = 0;\nfor (const [i, h] of payload.horarios_profissionais.entries()) {\n  const field = 'horarios_profissionais[' + i + ']';\n  const chave = String(h?.profissional_chave ?? '');\n  if (!profissionalKeys.has(chave)) throw new Error(field + '.profissional_chave não corresponde a nenhum profissional cadastrado: ' + chave);\n  const periodo = intervaloSemanal(h, field);\n  if (!periodo.ativo) continue;\n  horariosAtivos++;\n  if (!expediente.some(e => e.ativo && e.dia === periodo.dia && e.inicio <= periodo.inicio && e.fim >= periodo.fim)) {\n    throw new Error(field + ': horário ativo fora de um único período empresarial ativo ou atravessando uma pausa.');\n  }\n  const chaveDia = chave + ':' + periodo.dia;\n  const anteriores = horariosPorProfissional.get(chaveDia) || [];\n  if (anteriores.some(outro => periodo.inicio < outro.fim && outro.inicio < periodo.fim)) {\n    throw new Error(field + ': sobreposição de horários ativos do mesmo profissional; horários adjacentes são permitidos.');\n  }\n  anteriores.push(periodo);\n  horariosPorProfissional.set(chaveDia, anteriores);\n}\nif (!horariosAtivos) throw new Error('Informe ao menos um período semanal ativo de profissional.');\npayload.plano_codigo = String(payload.plano_codigo).toLowerCase();\npayload.empresa.codigo = String(payload.empresa.codigo).trim().toLowerCase();\npayload.empresa.instancia_evolution = String(payload.empresa.instancia_evolution).trim().toLowerCase();\nconst redirectTo = payload.portal_redirect_url ? String(payload.portal_redirect_url).trim() : undefined;\ndelete payload.admin.usuario_id;\nif (redirectTo && !/^https:\\/\\/[^\\s]+$/i.test(redirectTo)) throw new Error('portal_redirect_url deve ser uma URL HTTPS.');\nreturn [{ json: { payload, auth_accounts: authAccounts, redirect_to: redirectTo } }];"
+      },
+      "id": "1850b7e3-842b-40e3-a1f9-a1649dbae3d4",
+      "name": "Validar JSON V2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://supabase.multiverso360.com.br/rest/v1/rpc/agenda24h_provisionamento_api",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({p_etapa:'conferir',p_dados:$json}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 45000
+        }
+      },
+      "id": "771865a5-db84-4730-8aa5-59a67ce2fba9",
+      "name": "Conferir banco e contas existentes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        608
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "laN3d1SH19pz8fRy",
+          "name": "Supabase"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Validar JSON V2').first().json;\nconst resposta = $input.first().json;\nif (resposta.error || !(Number(resposta.statusCode)>=200 && Number(resposta.statusCode)<300)) {\n const b=resposta.body||{};\n throw new Error('Conferência pela API falhou. HTTP '+(resposta.statusCode||'sem resposta')+': '+(b.message||b.msg||resposta.error?.message||JSON.stringify(b))+' '+(b.details||'')+' '+(b.hint||''));\n}\nconst db = resposta.body;\nif (!Array.isArray(db.usuarios) || !Array.isArray(db.empresas)) throw new Error('Consulta de conferência retornou formato inesperado. Nenhuma conta foi criada.');\nif (db.empresas.length) throw new Error('Empresa já encontrada por código, WhatsApp ou instância. Nenhum dado foi alterado. Conferir cadastro existente antes de repetir: ' + JSON.stringify(db.empresas));\n// Política geral: reaproveitar apenas usuário Auth comprovadamente criado\n// para a mesma empresa e mesma chave de acesso, sem vínculos ativos.\nconst accounts = source.auth_accounts.map(account => {\n const found = db.usuarios.filter(u => String(u.email).toLowerCase() === account.email);\n if (found.length > 1) throw new Error('Mais de uma conta encontrada: ' + account.email);\n const user = found[0];\n if (!user) return {...account, criado_nesta_execucao: true};\n if (user.operador || user.membros.length) throw new Error('Conta já vinculada: ' + account.email + '. Conferir vínculo antes de reutilizar.');\n const codigo = source.payload.empresa.codigo;\n const marker = user.app_metadata?.agenda24h_provisionamento;\n const trusted = [8,9,10,11,12,13].includes(marker?.versao) && marker.empresa_codigo === codigo && marker.chave === account.chave;\n if (!trusted) throw new Error('Conta preexistente sem marcador Auth validado para esta empresa e chave: ' + account.email + '. Não será alterada nem vinculada automaticamente; contas legadas sem marcador exigem reconciliação manual segura.');\n return {...account, usuario_id: user.id, criado_nesta_execucao: false};\n});\nreturn [{json:{...source, auth_accounts:accounts}}];"
+      },
+      "id": "87d65f56-3d88-453e-8df5-0e83dce8088d",
+      "name": "Validar retomada segura",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source=$input.first().json;\nreturn source.auth_accounts.map(account=>({json:{account,\n method: account.criado_nesta_execucao ? 'POST' : 'GET',\n url: 'https://supabase.multiverso360.com.br/auth/v1/admin/users' + (account.criado_nesta_execucao ? '' : '/' + account.usuario_id),\n body:{email:account.email,email_confirm:false,\n user_metadata:{nome:account.nome,papel:account.tipo,empresa_codigo:source.payload.empresa.codigo},\n app_metadata:{agenda24h_provisionamento:{versao:13,empresa_codigo:source.payload.empresa.codigo,chave:account.chave}}}\n}}));"
+      },
+      "id": "dced19a2-5b88-4bf5-b040-fa93c0b024e5",
+      "name": "Preparar usuários Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.method === 'POST' ? JSON.stringify($json.body) : '{}' }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "c603b9a9-6cef-4051-a3cd-2427ad59613c",
+      "name": "Obter ou criar usuários Auth",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1312,
+        608
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "laN3d1SH19pz8fRy",
+          "name": "Supabase"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const validated = $('Validar JSON V2').first().json;\nconst requested = $('Preparar usuários Auth').all();\nconst responses = $input.all();\nif (requested.length !== responses.length) throw new Error('Quantidade de respostas inesperada. Contas preservadas; conferir Auth antes de repetir.');\nconst sucesso=[], falhas=[];\nfor(let i=0;i<requested.length;i++) {\n const account=requested[i].json.account, r=responses[i].json, b=r.body ?? {};\n const status=Number(r.statusCode || 0);\n const u=b.user || b;\n if(r.error || status<200 || status>=300 || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(u.id||'') || String(u.email||'').toLowerCase()!==account.email || (!account.criado_nesta_execucao && u.id!==account.usuario_id)) {\n   falhas.push({email:account.email,status,motivo:b.msg || b.message || b.error_description || r.error?.description || r.error?.message || JSON.stringify(b),codigo:b.error_code || b.code});\n } else sucesso.push({...account,usuario_id:u.id,email_confirmado:Boolean(u.email_confirmed_at || u.confirmed_at)});\n}\nif(falhas.length) return [{json:{falhou:true,motivo:JSON.stringify(falhas),usuarios_auth:sucesso}}];\nconst payload=JSON.parse(JSON.stringify(validated.payload));\nfor(const a of sucesso) {\n if(a.tipo==='administrador') payload.admin.usuario_id=a.usuario_id;\n else if(a.tipo==='profissional') payload.profissionais.find(p=>'profissional:'+p.chave===a.chave).usuario_id=a.usuario_id;\n else if(a.tipo==='recepcionista') payload.recepcionistas.find(p=>'recepcionista:'+p.chave===a.chave).usuario_id=a.usuario_id;\n}\nfor(const p of payload.profissionais) if(p.eh_admin) p.usuario_id=payload.admin.usuario_id;\nreturn [{json:{falhou:false,payload,payload_sql:JSON.stringify(payload),usuarios_auth:sucesso,redirect_to:validated.redirect_to}}];"
+      },
+      "id": "6e24e85c-64a1-4304-90d9-d0c49f1f5fe1",
+      "name": "Associar IDs do Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-falhou-auth",
+              "leftValue": "={{ $json.falhou }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        608
+      ],
+      "id": "22b45292-92cf-4b15-acab-bdb826345eba",
+      "name": "Acessos falharam?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://supabase.multiverso360.com.br/rest/v1/rpc/agenda24h_provisionamento_api",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({p_etapa:'gravar',p_dados:$json.payload}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 45000
+        }
+      },
+      "id": "428aac0e-f20f-4986-8189-3d476812f74c",
+      "name": "Provisionar Empresa V2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2064,
+        512
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "laN3d1SH19pz8fRy",
+          "name": "Supabase"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$input.first().json,b=r.body||{};\nif(r.error || !(Number(r.statusCode)>=200 && Number(r.statusCode)<300) || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(b.empresa_id||'')) {\n throw new Error('Gravação pela API não confirmada. HTTP '+(r.statusCode||'sem resposta')+': '+(b.message||b.msg||r.error?.message||JSON.stringify(b))+' '+(b.details||'')+' '+(b.hint||'')+'. Contas Auth preservadas.');\n}\nreturn [{json:b}];"
+      },
+      "id": "695de214-5b18-481d-a1f0-9d085320e4a4",
+      "name": "Conferir resultado da empresa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2304,
+        512
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Associar IDs do Auth').first().json;\nconst portal=new URL(c.redirect_to || 'https://consulta.multiverso360.com.br/definir-senha');\nconst destinoConvite=new URL('/definir-senha',portal.origin).toString();\nconst destinoRecuperacao=new URL('/redefinir-senha',portal.origin).toString();\nreturn c.usuarios_auth.map(a=>{\n const tipo=a.email_confirmado?'recuperacao':'convite';\n const destino=tipo==='convite'?destinoConvite:destinoRecuperacao;\n return {json:{email:a.email,tipo,body:{email:a.email},\n  url:'https://supabase.multiverso360.com.br/auth/v1/'+(tipo==='convite'?'invite':'recover')+'?redirect_to='+encodeURIComponent(destino)\n }};\n});"
+      },
+      "id": "1f8b54c0-2978-4c87-bf1f-2e9c73179ab9",
+      "name": "Preparar links de senha",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "8a7a6231-8132-4121-8b79-9799c5917daa",
+      "name": "Enviar links para definir senha",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2800,
+        512
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "laN3d1SH19pz8fRy",
+          "name": "Supabase"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const requested=$('Preparar links de senha').all();\nconst responses=$input.all();\nconst falhas=[];\nfor(let i=0;i<requested.length;i++){\n const r=responses[i]?.json||{},b=r.body||{};\n if(r.error || !(Number(r.statusCode)>=200 && Number(r.statusCode)<300)) falhas.push({email:requested[i].json.email,tipo:requested[i].json.tipo,status:r.statusCode,motivo:b.msg||b.message||r.error?.message||JSON.stringify(b)});\n}\nreturn [{json:{empresa_id:$('Conferir resultado da empresa').first().json.empresa_id,conferencia:$('Conferir resultado da empresa').first().json.conferencia,envios_aceitos:requested.length-falhas.length,falhas_envio:falhas,mensagem:falhas.length?'Empresa gravada, mas houve falha ao solicitar convites ou links de recuperação. Não repita o provisionamento; corrigir somente o envio.':'Empresa gravada. Solicitações de convite ou recuperação aceitas pelo Auth; a entrega depende do SMTP. Confira os vínculos no portal.'}}];"
+      },
+      "id": "b9bd527f-3ca3-4e77-b07f-199359b96226",
+      "name": "Conferir envio de links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3056,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { sucesso: true, empresa_id: $json.empresa_id, conferencia: $json.conferencia, envios_aceitos: $json.envios_aceitos, falhas_envio: $json.falhas_envio, mensagem: $json.mensagem } }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://onboarding.multiverso360.com.br"
+              }
+            ]
+          }
+        }
+      },
+      "id": "bcdc31df-b107-45e8-b514-f02d3483f248",
+      "name": "Responder ao onboarding",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        3312,
+        512
+      ],
+      "webhookId": "98353bfb-6613-4280-b1de-c9d719325c1b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Associar IDs do Auth').first().json;\nconst r=$input.first().json;\nconst detalhe=c.falhou?c.motivo:JSON.stringify(r.error || r.body || r);\nreturn [{json:{mensagem:'Provisionamento interrompido. '+detalhe+'. Nenhuma conta Auth foi excluída. Verifique o cadastro antes de repetir; use o mesmo empresa.codigo.',usuarios_auth_preservados:c.usuarios_auth||[]}}];"
+      },
+      "id": "52c2c822-fde1-4920-88c4-829e0564b111",
+      "name": "Registrar falha sem excluir contas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2064,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "={{ $json.mensagem }}"
+      },
+      "id": "c9a302fc-86f5-4905-8d36-bdd2474059de",
+      "name": "Encerrar com erro real",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        2304,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## V11 — corpo JSON explícito e retomada genérica\n- Todos os 4 nós HTTP Request declaram contentType=json, specifyBody=json e jsonBody dinâmico.\n- `Obter ou criar usuários Auth` preserva GET sem body e POST com body (sendBody calculado conforme method).\n- NÃO há e-mails, IDs ou códigos de empresas específicos no tratamento de retomada.\n- Contas preexistentes só são reutilizadas se sem vínculos e com marcador Auth válido da MESMA empresa e chave (V8–V13).\n- Contas históricas sem marcador requerem reconciliação manual; jamais vincular somente por e-mail.\n- Preserva a validação de horários e toda a RPC/SQL originais, sem alterar banco de dados.\n- Importar como NOVO workflow, conferir a credencial em TODOS os HTTP nodes.\n- Não houve teste contra o servidor real. Verificar contas existentes antes de executar; não rodar em paralelo.\n- Conferir visualmente Send Body/Body Content Type/Specify Body/JSON no nó Auth importado.\n- V12: sendBody do nó Auth agora é true fixo (expressão em sendBody derrubava o jsonBody -> corpo vazio / bad_json). GET envia {} inofensivo.\n\n- V13: contas novas são criadas sem confirmação; após gravar a empresa, o Auth envia convite para /definir-senha. Contas já confirmadas usam recuperação para /redefinir-senha.\n- Conferir a credencial Supabase API nos 4 nós HTTP: Host correto e Secret Key administrativa. O JSON exportado não contém o valor da chave.\n\n- Variante webhook do onboarding: configurar credencial Header Auth no primeiro node com nome X-Agenda24h-Provisionamento-Key. O valor da chave deve ser informado manualmente na etapa Revisão. Não incluir a chave no HTML/JSON do repositório.\n- Para chamada do navegador, permitir OPTIONS/preflight com origem https://onboarding.multiverso360.com.br e cabeçalhos Content-Type e X-Agenda24h-Provisionamento-Key no proxy reverso do n8n.\n",
+        "height": 460,
+        "width": 1100
+      },
+      "id": "9fa80ffa-9803-4c8a-9382-b809f9d6c6d3",
+      "name": "Notas V11 — HTTP JSON e retomada generica",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Validar JSON V2": {
+      "main": [
+        [
+          {
+            "node": "Conferir banco e contas existentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir banco e contas existentes": {
+      "main": [
+        [
+          {
+            "node": "Validar retomada segura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar retomada segura": {
+      "main": [
+        [
+          {
+            "node": "Preparar usuários Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar usuários Auth": {
+      "main": [
+        [
+          {
+            "node": "Obter ou criar usuários Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obter ou criar usuários Auth": {
+      "main": [
+        [
+          {
+            "node": "Associar IDs do Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Associar IDs do Auth": {
+      "main": [
+        [
+          {
+            "node": "Acessos falharam?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acessos falharam?": {
+      "main": [
+        [
+          {
+            "node": "Registrar falha sem excluir contas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Provisionar Empresa V2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provisionar Empresa V2": {
+      "main": [
+        [
+          {
+            "node": "Conferir resultado da empresa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir resultado da empresa": {
+      "main": [
+        [
+          {
+            "node": "Preparar links de senha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar falha sem excluir contas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar links de senha": {
+      "main": [
+        [
+          {
+            "node": "Enviar links para definir senha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar links para definir senha": {
+      "main": [
+        [
+          {
+            "node": "Conferir envio de links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir envio de links": {
+      "main": [
+        [
+          {
+            "node": "Responder ao onboarding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar falha sem excluir contas": {
+      "main": [
+        [
+          {
+            "node": "Encerrar com erro real",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receber provisionamento do onboarding": {
+      "main": [
+        [
+          {
+            "node": "Validar JSON V2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}
