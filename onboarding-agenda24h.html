@@ -2681,7 +2681,14 @@ async function exportarContratoPdf(){
   }catch(error){showModal('Não foi possível gerar o contrato',error.message||'Confira a conexão e tente novamente.',()=>{},'Entendi');return false;}
   finally{botao.disabled=false;}
 }
-function fileName(kind,ext){return 'agenda24h-'+kind+'-'+(generateSlug(state.empresa.codigo||state.empresa.nome_fantasia)||'cliente')+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.'+ext;}
+function fileName(kind,ext){
+  if(kind==='workflow'){
+    const hoje=new Date();
+    const data=[hoje.getFullYear(),String(hoje.getMonth()+1).padStart(2,'0'),String(hoje.getDate()).padStart(2,'0')].join('-');
+    return data+'-'+(generateSlug(state.empresa.nome_fantasia)||'empresa')+'-wf-a24h.'+ext;
+  }
+  return 'agenda24h-'+kind+'-'+(generateSlug(state.empresa.codigo||state.empresa.nome_fantasia)||'cliente')+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.'+ext;
+}
 async function gerarWorkflowCompleto(data){
   const response=await fetch(new URL('workflow-principal-base-corrigida.json',document.baseURI));
   if(!response.ok)throw Error('Não foi possível carregar o workflow base.');
