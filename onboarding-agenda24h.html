@@ -2684,7 +2684,7 @@ async function exportarContratoPdf(){
 function fileName(kind,ext){
   if(kind==='workflow'){
     const hoje=new Date();
-    const data=[hoje.getFullYear(),String(hoje.getMonth()+1).padStart(2,'0'),String(hoje.getDate()).padStart(2,'0')].join('-');
+    const data=[String(hoje.getDate()).padStart(2,'0'),String(hoje.getMonth()+1).padStart(2,'0'),String(hoje.getFullYear()).slice(-2)].join('-');
     return data+'-'+(generateSlug(state.empresa.nome_fantasia)||'empresa')+'-wf-a24h.'+ext;
   }
   return 'agenda24h-'+kind+'-'+(generateSlug(state.empresa.codigo||state.empresa.nome_fantasia)||'cliente')+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.'+ext;
