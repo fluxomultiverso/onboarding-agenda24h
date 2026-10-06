@@ -1355,6 +1355,7 @@ function renderStepServicos(container) {
   let html = `<div class="step-content active">
     <fieldset class="form-section">
       <legend>Serviços (${state.servicos.length})</legend>
+      <div class="alert alert-info"><strong>Traga seus clientes de volta.</strong> Para cada serviço, escolha o prazo em dias ou meses e o convite de retorno: manutenção ou novo serviço.</div>
       ${state.servicos.length === 0 ? '<p class="empty-state">Nenhum serviço cadastrado. Pelo menos um é necessário para exportar.</p>' : ""}
       ${state.servicos.map((s, i) => {
         const vincs = state.vinculos.filter(v => v.servico_chave === s.chave);
@@ -1368,6 +1369,7 @@ function renderStepServicos(container) {
               <span class="card-name">${escapeHtml(s.nome || "Sem nome")}</span>
               ${s.duracao_min ? `<span style="font-size:0.8em;color:#64748b">${s.duracao_min} min</span>` : ""}
               ${s.preco_cents !== null && s.preco_cents !== undefined ? `<span style="font-size:0.85em;font-weight:600;color:var(--green)">${formatBRL(s.preco_cents)}</span>` : ""}
+              <span class="badge badge-active" data-svc-reativacao="${i}">${formatPrazoReativacao(s)}</span>
               <span class="badge ${s.ativo ? "badge-active" : "badge-inactive"}">${s.ativo ? "Ativo" : "Inativo"}</span>
               ${dup ? '<span class="badge badge-inactive">Chave duplicada</span>' : ""}
             </div>
@@ -1402,6 +1404,27 @@ function renderStepServicos(container) {
                 ${s.preco_error ? `<span class="form-error">${escapeHtml(s.preco_error)}</span>` : (s.preco_cents !== null && s.preco_cents !== undefined ? `<span class="form-hint">Interpretado: ${formatBRL(s.preco_cents)}</span>` : "")}
               </div>
             </div>
+            <fieldset class="form-section">
+              <legend>Reativação de clientes</legend>
+              <p class="form-hint">Após o atendimento concluído, convide o cliente a voltar no prazo ideal para este serviço.</p>
+              <div class="form-row">
+                <div class="form-field">
+                  <label class="form-label" for="svc-${i}-reativacao">Reativar após *</label>
+                  <input class="form-input" id="svc-${i}-reativacao" type="number" inputmode="numeric" min="1" max="${s.prazo_reativacao_unidade === 'meses' ? 1200 : 32767}" step="1" required value="${escapeHtml(String(s.prazo_reativacao_quantidade ?? ""))}" placeholder="Ex.: 30" aria-describedby="svc-${i}-reativacao-hint svc-${i}-reativacao-error">
+                </div>
+                <div class="form-field">
+                  <label class="form-label" for="svc-${i}-reativacao-unidade">Unidade *</label>
+                  <select class="form-select" id="svc-${i}-reativacao-unidade"><option value="dias"${s.prazo_reativacao_unidade === 'meses' ? '' : ' selected'}>Dias</option><option value="meses"${s.prazo_reativacao_unidade === 'meses' ? ' selected' : ''}>Meses</option></select>
+                </div>
+              </div>
+              <span class="form-hint" id="svc-${i}-reativacao-hint">Ex.: corte a cada 30 dias; manutenção a cada 3 meses. Meses seguem o calendário.</span>
+              <span class="form-error" id="svc-${i}-reativacao-error">${validPrazoReativacao(s) ? "" : "Informe um prazo inteiro positivo: até 32767 dias ou 1200 meses."}</span>
+              <div class="form-field" style="margin-top:12px">
+                <label class="form-label" for="svc-${i}-reativacao-objetivo">O que sugerir no convite? *</label>
+                <select class="form-select" id="svc-${i}-reativacao-objetivo"><option value="manutencao"${s.reativacao_objetivo === 'novo_servico' ? '' : ' selected'}>Manutenção do serviço realizado</option><option value="novo_servico"${s.reativacao_objetivo === 'novo_servico' ? ' selected' : ''}>Agendamento de um novo serviço</option></select>
+                <span class="form-hint">O envio respeita a automação habilitada, o consentimento do cliente e a ausência de nova reserva aplicável.</span>
+              </div>
+            </fieldset>
             <label class="toggle-label">
               <input type="checkbox" class="toggle-input" id="svc-${i}-ativo" ${s.ativo ? "checked" : ""}>
               <span class="toggle-switch"></span>
@@ -1438,6 +1461,9 @@ function renderStepServicos(container) {
       nome: "",
       descricao: "",
       duracao_min: 0,
+      prazo_reativacao_quantidade: null,
+      prazo_reativacao_unidade: "dias",
+      reativacao_objetivo: "manutencao",
       preco_cents: null,
       preco_raw: "",
       preco_error: null,
@@ -1488,6 +1514,20 @@ function renderStepServicos(container) {
       const v = Number(elDur.value);
       state.servicos[i].duracao_min = isNaN(v) ? 0 : v;
     };
+
+    // Prazo e objetivo específicos deste serviço.
+    const elReativacao = document.getElementById(`svc-${i}-reativacao`);
+    if (elReativacao) elReativacao.oninput = () => {
+      s.prazo_reativacao_quantidade = elReativacao.value === "" ? null : Number(elReativacao.value);
+      container.querySelector(`[data-svc-reativacao="${i}"]`).textContent = formatPrazoReativacao(s);
+      const valid = validPrazoReativacao(s);
+      elReativacao.setAttribute("aria-invalid", String(!valid));
+      document.getElementById(`svc-${i}-reativacao-error`).textContent = valid ? "" : "Informe um prazo inteiro positivo: até 32767 dias ou 1200 meses.";
+    };
+    const elUnidade = document.getElementById(`svc-${i}-reativacao-unidade`);
+    if (elUnidade) elUnidade.onchange = () => {s.prazo_reativacao_unidade = elUnidade.value; renderCurrentStep();};
+    const elObjetivo = document.getElementById(`svc-${i}-reativacao-objetivo`);
+    if (elObjetivo) elObjetivo.onchange = () => {s.reativacao_objetivo = elObjetivo.value; renderCurrentStep();};
 
     // Preço — com parsePreco e formatação ao sair do campo
     const elPreco = document.getElementById(`svc-${i}-preco`);
@@ -2076,6 +2116,9 @@ function buildRawJSONFinal() {
       nome: s.nome,
       descricao: s.descricao || undefined,
       duracao_min: s.duracao_min,
+      prazo_reativacao_dias: s.prazo_reativacao_unidade === 'dias' ? s.prazo_reativacao_quantidade : null,
+      prazo_reativacao_meses: s.prazo_reativacao_unidade === 'meses' ? s.prazo_reativacao_quantidade : null,
+      reativacao_objetivo: s.reativacao_objetivo,
       preco: s.preco_cents !== null && s.preco_cents !== undefined ? s.preco_cents / 100 : 0,
       ativo: s.ativo,
       ordem_exibicao: i,
@@ -2108,6 +2151,7 @@ function buildRawJSONFinal() {
       buffer_exige_expediente: false,
       lembrete_24h_ativo: state.ia.lembrete_24h,
       lembrete_2h_ativo: state.ia.lembrete_2h,
+      reativacao_automatica: state.servicos.some(s => s.ativo && validPrazoReativacao(s)),
       numero_atendimento_humano: state.ia.numero_atendimento_humano || undefined,
       numero_reserva: state.ia.numero_reserva || undefined,
       numero_notificacao: state.ia.numero_notificacao || undefined,
@@ -2222,6 +2266,9 @@ function buildRawJSONFinal() {
     catalogo_referencia: state.servicos.map(s => ({
       nome: s.nome,
       duracao_min: s.duracao_min,
+      prazo_reativacao_dias: s.prazo_reativacao_unidade === 'dias' ? s.prazo_reativacao_quantidade : null,
+      prazo_reativacao_meses: s.prazo_reativacao_unidade === 'meses' ? s.prazo_reativacao_quantidade : null,
+      reativacao_objetivo: s.reativacao_objetivo,
       preco: s.preco_cents !== null ? s.preco_cents / 100 : 0,
     })),
     expediente_referencia: state.horarios_empresa.filter(d => d.aberto).map(d => ({
@@ -2317,6 +2364,9 @@ function init() {
 
 // Agenda24h 2.0 — validação, arquivos e integrações locais.
 const APP_VERSION = '2.0.0';
+function validPrazoReativacao(s) {return ['dias','meses'].includes(s.prazo_reativacao_unidade) && Number.isInteger(s.prazo_reativacao_quantidade) && s.prazo_reativacao_quantidade >= 1 && s.prazo_reativacao_quantidade <= (s.prazo_reativacao_unidade === 'meses' ? 1200 : 32767);}
+function formatPrazoReativacao(s) {return validPrazoReativacao(s) ? 'Reativação: ' + s.prazo_reativacao_quantidade + ' ' + (s.prazo_reativacao_quantidade === 1 ? (s.prazo_reativacao_unidade === 'meses' ? 'mês' : 'dia') : s.prazo_reativacao_unidade) : 'Reativação: prazo pendente';}
+function formatObjetivoReativacao(s) {return s.reativacao_objetivo === 'novo_servico' ? 'Novo serviço' : 'Manutenção';}
 let fileDirty = false;
 function normalizePhone(raw) {
   const d=String(raw||'').replace(/\D/g,'');
@@ -2399,6 +2449,8 @@ function validar() {
     if(!/^[a-zA-Z0-9_-]+$/.test(s.chave)||sk.has(s.chave))add(2,'svc-'+i+'-chave','Chave de serviço inválida ou repetida.');sk.add(s.chave);
     if(!s.ativo)return;
     req(s.nome,2,'svc-'+i+'-nome','Nome do serviço');if(!Number.isInteger(s.duracao_min)||s.duracao_min<1||s.duracao_min>32767)add(2,'svc-'+i+'-dur','Duração deve ser um número inteiro positivo de minutos.');
+    if(!validPrazoReativacao(s))add(2,'svc-'+i+'-reativacao','Informe o prazo de reativação de '+(s.nome||'este serviço')+' em dias ou meses inteiros e positivos.');
+    if(!['manutencao','novo_servico'].includes(s.reativacao_objetivo))add(2,'svc-'+i+'-reativacao-objetivo','Escolha manutenção ou novo serviço para a reativação.');
     const price=parsePreco(s.preco_raw);if(!price.valid)add(2,'svc-'+i+'-preco',price.error);else s.preco_cents=price.cents;
     if(!links.some(v=>v.servico_chave===s.chave))add(2,'svc-'+i+'-nome','Vincule um profissional ativo ao serviço '+(s.nome||'sem nome')+'.');
   });
@@ -2632,6 +2684,7 @@ function renderStepRevisao(container) {
   ]:[];
   container.innerHTML='<h2>Revisão e saída</h2><p>Confira o cadastro antes de salvar ou provisionar.</p>'+
     (errors.length?'<div class="alert alert-danger">Há pendências. Toque em uma para corrigir.</div>'+STEPS.slice(0,5).map((name,step)=>{const group=errors.map((e,i)=>({...e,i})).filter(e=>e.step===step);return group.length?'<fieldset class="form-section"><legend>'+escapeHtml(name)+'</legend>'+group.map(e=>'<button class="error-link" data-error="'+e.i+'">'+escapeHtml(e.msg)+'</button>').join('')+'</fieldset>':'';}).join(''):'<div class="alert alert-info">Cadastro validado. Salve cada arquivo na pasta desejada. No iPad, escolha “Salvar em Arquivos” no menu de compartilhamento.</div>')+
+    '<fieldset class="form-section"><legend>Reativação por serviço</legend><p>Confira o prazo e o convite de retorno após cada atendimento concluído.</p>'+state.servicos.filter(s=>s.ativo).map(s=>'<p><strong>'+escapeHtml(s.nome||'Sem nome')+'</strong> — '+formatPrazoReativacao(s)+' · '+formatObjetivoReativacao(s)+'</p>').join('')+'</fieldset>'+
     '<fieldset class="form-section"><legend>Contrato</legend><p>Confira os dados do representante.</p><div class="form-row"><div class="form-field"><label class="form-label" for="contrato-modalidade">Cobrança *</label><select class="form-select" id="contrato-modalidade" data-contract="modalidade"><option value="">Selecione</option><option value="mensal"'+(contrato.modalidade==='mensal'?' selected':'')+'>Mensal</option><option value="anual"'+(contrato.modalidade==='anual'?' selected':'')+'>Anual</option></select></div><div class="form-field"><label class="form-label" for="contrato-meio">Meio de pagamento *</label><input class="form-input" id="contrato-meio" data-contract="meio_pagamento" value="'+escapeHtml(contrato.meio_pagamento)+'" placeholder="Ex.: cartão, PIX ou boleto"></div></div><div class="form-row"><div class="form-field"><label class="form-label" for="contrato-nome">Nome de quem assinará *</label><input class="form-input" id="contrato-nome" data-contract="signatario_nome" value="'+escapeHtml(contrato.signatario_nome)+'"></div><div class="form-field"><label class="form-label" for="contrato-cpf">CPF de quem assinará *</label><input class="form-input" id="contrato-cpf" inputmode="numeric" data-contract="signatario_cpf" value="'+escapeHtml(contrato.signatario_cpf)+'" placeholder="Somente números"></div></div><div class="form-row"><div class="form-field"><label class="form-label" for="contrato-cargo">Cargo ou vínculo com a empresa *</label><input class="form-input" id="contrato-cargo" data-contract="signatario_cargo" value="'+escapeHtml(contrato.signatario_cargo)+'" placeholder="Ex.: titular ou sócio administrador"></div><div class="form-field"><label class="form-label" for="contrato-email">E-mail do signatário *</label><input class="form-input" id="contrato-email" type="email" data-contract="signatario_email" value="'+escapeHtml(contrato.signatario_email)+'"></div></div><div class="form-field"><label class="form-label" for="contrato-suporte">Canal de suporte e cancelamento *</label><input class="form-input" id="contrato-suporte" data-contract="canal_suporte" value="'+escapeHtml(contrato.canal_suporte)+'" placeholder="E-mail ou outro canal eletrônico"></div><button class="btn btn-primary" id="btn-generate-contract" '+(errors.length?'disabled':'')+'>Gerar contrato PDF</button><span class="form-hint">O arquivo será salvo ou compartilhado no iPad.</span></fieldset>'+
     '<fieldset class="form-section"><legend>Provisionamento</legend><div class="form-field"><label class="form-label" for="provisionamento-webhook-url">URL de produção do webhook *</label><input class="form-input" id="provisionamento-webhook-url" type="url" inputmode="url" autocomplete="off" value="https://n8n.multiverso360.com.br/webhook/agenda24h/provisionamento/v13"></div><div class="form-field"><label class="form-label" for="provisionamento-chave">Chave de acesso ao webhook *</label><input class="form-input" id="provisionamento-chave" type="password" autocomplete="off" spellcheck="false"></div><button class="btn btn-primary" id="btn-provisionar" '+(errors.length?'disabled':'')+'>Provisionar</button><span class="form-hint">O envio ocorre somente ao tocar em Provisionar. A chave não é salva no cadastro.</span></fieldset>'+
     '<div class="actions"><button class="btn btn-primary" id="btn-save-provisionamento" '+(errors.length?'disabled':'')+'>Salvar provisionamento JSON</button><button class="btn btn-primary" id="btn-save-workflow" '+(errors.length?'disabled':'')+'>Salvar workflow completo JSON</button><button class="btn btn-secondary" id="btn-save-faq" '+(errors.length?'disabled':'')+'>Salvar FAQ TXT</button><button class="btn btn-secondary" id="btn-save-prompt" '+(errors.length?'disabled':'')+'>Salvar system prompt TXT</button><button class="btn btn-secondary" id="btn-save-html">Salvar resumo HTML</button></div>'+
@@ -2778,7 +2831,7 @@ function parseDraft(text){
   const people=(arr,template,label)=>{const seen=new Set();return list(arr,label).map(p=>{const obj=fields(p,template,label);if(!safeKey(obj.chave)||seen.has(obj.chave))throw Error('Chave inválida ou repetida: '+label);seen.add(obj.chave);obj._open=p._open===true;return obj;});};
   out.profissionais=people(data.profissionais,{chave:'',nome:'',email:'',telefone:'',ativo:true,eh_admin:false,acesso_portal:false,cor_agenda:'',observacoes:''},'profissionais');
   out.recepcionistas=people(data.recepcionistas,{chave:'',nome:'',email:'',telefone:''},'recepcionistas');
-  const seenService=new Set();out.servicos=list(data.servicos,'servicos').map(s=>{const o=fields(s,{chave:'',nome:'',descricao:'',duracao_min:0,preco_raw:'',ativo:true},'serviço');if(!safeKey(o.chave)||seenService.has(o.chave))throw Error('Chave de serviço inválida ou repetida.');seenService.add(o.chave);if(!Number.isFinite(o.duracao_min))throw Error('Duração inválida.');const price=parsePreco(o.preco_raw);return {...o,preco_cents:price.cents,preco_error:price.error,_open:s._open===true};});
+  const seenService=new Set();out.servicos=list(data.servicos,'servicos').map(s=>{const o=fields(s,{chave:'',nome:'',descricao:'',duracao_min:0,preco_raw:'',ativo:true},'serviço');if(!safeKey(o.chave)||seenService.has(o.chave))throw Error('Chave de serviço inválida ou repetida.');seenService.add(o.chave);if(!Number.isFinite(o.duracao_min))throw Error('Duração inválida.');o.prazo_reativacao_quantidade=s.prazo_reativacao_quantidade===undefined?(s.prazo_reativacao_dias??null):s.prazo_reativacao_quantidade;o.prazo_reativacao_unidade=s.prazo_reativacao_unidade===undefined?'dias':s.prazo_reativacao_unidade;o.reativacao_objetivo=s.reativacao_objetivo===undefined?'manutencao':s.reativacao_objetivo;if((o.prazo_reativacao_quantidade!==null&&!validPrazoReativacao(o))||!['dias','meses'].includes(o.prazo_reativacao_unidade)||!['manutencao','novo_servico'].includes(o.reativacao_objetivo))throw Error('Prazo ou objetivo de reativação inválido.');const price=parsePreco(o.preco_raw);return {...o,preco_cents:price.cents,preco_error:price.error,_open:s._open===true};});
   const days=(x,legacy=false)=>{const ds=list(x,'horários',7);if(ds.length!==7)throw Error('Horários devem conter os sete dias.');return ds.map((d,i)=>{if(!object(d)||typeof d.aberto!=='boolean'||(!legacy&&d.dia!==i)||(legacy&&d.dia!==undefined&&d.dia!==i))throw Error('Dia da semana inválido.');return {dia:i,aberto:d.aberto,intervalos:list(d.intervalos,'intervalos',24).map(iv=>fields(iv,{inicio:'',fim:''},'intervalo'))};});};
   out.horarios_empresa=days(data.horarios_empresa);
   if(!object(data.horarios_profissionais))throw Error('Horários dos profissionais ausentes.');
@@ -2799,7 +2852,7 @@ function gerarResumoHTML(){
   const e=state.empresa;
   return '<!doctype html><html lang="pt-BR"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cadastro interno — '+esc(e.nome_fantasia)+'</title><style>body{font:16px system-ui;color:#203c30;max-width:950px;margin:24px auto;padding:16px}img{width:100px}table{width:100%;border-collapse:collapse;margin:16px 0;overflow-wrap:anywhere}td,th{padding:9px;text-align:left;border:1px solid #bbcabc}h2{margin-top:28px}p{white-space:pre-wrap}@media print{body{font-size:11px}tr{break-inside:avoid}}</style><body><img alt="Agenda24h" src="'+document.getElementById('brand-logo').src+'"><h1>'+esc(e.nome_fantasia||'Cadastro incompleto')+'</h1><p>'+(errors.length?'RASCUNHO — há dados pendentes.':'Cadastro revisado — não comprova provisionamento.')+'</p>'+table(['Campo','Informação'],Object.entries({Razão_social:e.razao_social,Documento:e.documento,Ramo:e.ramo,WhatsApp:formatPhoneBR(e.whatsapp),Telefone:formatPhoneBR(e.telefone_contato),Email:e.email_contato,Endereço:e.endereco,Bairro:e.bairro,Cidade:e.cidade,UF:e.uf,CEP:e.cep,Instagram:e.instagram,Site:e.site,Mapa:e.google_maps,Fuso:e.fuso_horario,Código:e.codigo,Instância:e.instancia_evolution,Observações:e.observacoes}).map(([k,v])=>[k.replaceAll('_',' '),v||'—']))+
   '<h2>Plano</h2><p>'+esc(pl?pl.nome+' — '+formatBRL(pl.preco_centavos)+'/mês; até '+pl.max_profissionais+' profissionais, '+pl.max_recepcionistas+' recepcionistas e 1 administrador.':'Não selecionado')+'</p><h2>Pessoas e funções</h2>'+table(['Nome','Função','E-mail','Telefone','Acesso'],[[state.admin.nome,'Administrador',state.admin.email,formatPhoneBR(state.admin.telefone),'Administrador'],...state.profissionais.map(p=>[p.nome,(p.eh_admin?'Administrador e profissional':'Profissional')+(p.ativo?'':' (inativo)'),p.email,formatPhoneBR(p.telefone),p.eh_admin?'Mesmo acesso do administrador':p.acesso_portal?'Profissional':'Sem acesso próprio']),...state.recepcionistas.map(r=>[r.nome,'Recepcionista',r.email,formatPhoneBR(r.telefone),'Agenda da equipe'])])+
-  '<p>Recepção: consultar, criar, cancelar e reagendar; marcar comparecimento e falta. Sem administração. Criação e reagendamento exigem nome completo, telefone e dados completos da reserva.</p><h2>Serviços e profissionais</h2>'+table(['Serviço','Duração','Preço','Profissionais'],state.servicos.map(s=>[s.nome+(s.ativo?'':' (inativo)'),s.duracao_min+' min',parsePreco(s.preco_raw).valid?formatBRL(parsePreco(s.preco_raw).cents):'Pendente',state.vinculos.filter(v=>v.servico_chave===s.chave).map(v=>state.profissionais.find(p=>p.chave===v.profissional_chave)?.nome).filter(Boolean).join(', ')]))+
+  '<p>Recepção: consultar, criar, cancelar e reagendar; marcar comparecimento e falta. Sem administração. Criação e reagendamento exigem nome completo, telefone e dados completos da reserva.</p><h2>Serviços e profissionais</h2>'+table(['Serviço','Duração','Preço','Reativação','Convite','Profissionais'],state.servicos.map(s=>[s.nome+(s.ativo?'':' (inativo)'),s.duracao_min+' min',parsePreco(s.preco_raw).valid?formatBRL(parsePreco(s.preco_raw).cents):'Pendente',formatPrazoReativacao(s),formatObjetivoReativacao(s),state.vinculos.filter(v=>v.servico_chave===s.chave).map(v=>state.profissionais.find(p=>p.chave===v.profissional_chave)?.nome).filter(Boolean).join(', ')]))+
   '<h2>Expediente da empresa</h2>'+schedule(state.horarios_empresa)+state.profissionais.map(p=>'<h2>Horários — '+esc(p.nome)+'</h2>'+schedule(effectiveDays(p))).join('')+
   '<h2>Contatos operacionais</h2>'+table(['Uso','Número'],[['Atendimento humano',formatPhoneBR(state.ia.numero_atendimento_humano)],['Reserva',formatPhoneBR(state.ia.numero_reserva)],['Notificação interna',formatPhoneBR(state.ia.numero_notificacao)]])+'<p>Gerado em '+esc(new Date().toLocaleString('pt-BR'))+' • Cadastro '+esc(state.identificador)+'</p></body></html>';
 }

@@ -1,0 +1,289 @@
+{
+  "name": "Agenda24h - Reativacao por servico V3 (dias ou meses)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "3970ce60-6873-4720-99d7-2ec3847f466e",
+      "name": "A cada 5 minuto(s)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ultimos AS (\n  SELECT DISTINCT ON (a.empresa_id, a.cliente_id) a.id AS agendamento_id, a.empresa_id, a.cliente_id,\n    a.concluido_em, s.prazo_reativacao_dias, s.prazo_reativacao_meses, e.fuso_horario\n  FROM public.agendamentos a\n  JOIN public.servicos s ON s.id = a.servico_id AND s.empresa_id = a.empresa_id\n  JOIN public.clientes c ON c.id = a.cliente_id AND c.empresa_id = a.empresa_id\n  JOIN public.empresas e ON e.id = a.empresa_id\n  JOIN public.empresa_configuracoes cfg ON cfg.empresa_id = e.id\n  WHERE a.status = 'concluido' AND a.concluido_em IS NOT NULL\n    AND cfg.reativacao_automatica AND c.aceita_reativacao AND c.anonimizado_em IS NULL\n    AND c.telefone_e164 IS NOT NULL AND e.status_operacional = 'ativo'\n    AND NOT EXISTS (SELECT 1 FROM public.agendamentos futuro WHERE futuro.empresa_id = a.empresa_id\n      AND futuro.cliente_id = a.cliente_id AND futuro.status = 'confirmado' AND futuro.inicio_em > now())\n  ORDER BY a.empresa_id, a.cliente_id, a.concluido_em DESC\n), criados AS (\n  INSERT INTO public.fila_mensagens (empresa_id, cliente_id, agendamento_id, tipo, chave_idempotencia, programado_para, contexto)\n  SELECT empresa_id, cliente_id, agendamento_id, 'reativacao',\n    format('agendamento:%s:reativacao', agendamento_id),\n    public.calcular_data_reativacao(concluido_em, prazo_reativacao_dias, prazo_reativacao_meses, fuso_horario),\n    '{\"origem\":\"atendimento_concluido\"}'::jsonb\n  FROM ultimos WHERE (prazo_reativacao_dias IS NOT NULL OR prazo_reativacao_meses IS NOT NULL)\n    AND public.calcular_data_reativacao(concluido_em, prazo_reativacao_dias, prazo_reativacao_meses, fuso_horario) <= now()\n  LIMIT 200 ON CONFLICT (chave_idempotencia) DO NOTHING RETURNING id\n)\nSELECT count(*)::integer AS geradas FROM criados;",
+        "options": {
+          "connectionTimeout": 5
+        }
+      },
+      "id": "10ad1968-471c-4a71-8aa2-5d243beb9a4c",
+      "name": "Gerar reativações V2",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "rKBK9lfP7PQ1sCNO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH candidatos AS (\n  SELECT f.id FROM public.fila_mensagens f\n  JOIN public.agendamentos a ON a.id = f.agendamento_id AND a.empresa_id = f.empresa_id\n  JOIN public.servicos s ON s.id = a.servico_id AND s.empresa_id = a.empresa_id\n  JOIN public.clientes c ON c.id = f.cliente_id AND c.empresa_id = f.empresa_id\n  JOIN public.empresas e ON e.id = f.empresa_id\n  JOIN public.empresa_configuracoes cfg ON cfg.empresa_id = e.id\n  WHERE f.estado = 'pendente' AND f.tipo = 'reativacao' AND f.programado_para <= now()\n    AND f.tipo = 'reativacao' AND a.status = 'concluido'\n  AND public.calcular_data_reativacao(a.concluido_em, s.prazo_reativacao_dias, s.prazo_reativacao_meses, e.fuso_horario) <= now()\n  AND (s.prazo_reativacao_dias IS NOT NULL OR s.prazo_reativacao_meses IS NOT NULL) AND cfg.reativacao_automatica\n  AND c.aceita_reativacao AND c.anonimizado_em IS NULL AND c.telefone_e164 IS NOT NULL\n  AND e.status_operacional = 'ativo' AND (cfg.janela_envio_inicio IS NULL AND cfg.janela_envio_fim IS NULL OR cfg.janela_envio_inicio IS NOT NULL AND cfg.janela_envio_fim IS NOT NULL AND (CASE WHEN cfg.janela_envio_inicio <= cfg.janela_envio_fim THEN (now() AT TIME ZONE e.fuso_horario)::time >= cfg.janela_envio_inicio AND (now() AT TIME ZONE e.fuso_horario)::time < cfg.janela_envio_fim ELSE (now() AT TIME ZONE e.fuso_horario)::time >= cfg.janela_envio_inicio OR (now() AT TIME ZONE e.fuso_horario)::time < cfg.janela_envio_fim END))\n  AND NOT EXISTS (SELECT 1 FROM public.agendamentos futuro WHERE futuro.empresa_id = a.empresa_id\n    AND futuro.cliente_id = a.cliente_id AND futuro.status = 'confirmado' AND futuro.inicio_em > now())\n  AND NOT EXISTS (SELECT 1 FROM public.agendamentos recente WHERE recente.empresa_id = a.empresa_id\n    AND recente.cliente_id = a.cliente_id AND recente.status = 'concluido' AND recente.concluido_em > a.concluido_em)\n  ORDER BY f.programado_para, f.criado_em LIMIT 25 FOR UPDATE OF f SKIP LOCKED\n), reservados AS (\n  UPDATE public.fila_mensagens f SET estado = 'processando', processando_em = now(), tentativas = f.tentativas + 1\n  FROM candidatos x WHERE f.id = x.id RETURNING f.*\n)\nSELECT f.id AS fila_id, f.agendamento_id, e.nome_fantasia, e.instancia_evolution,\n       c.telefone_e164, c.nome AS nome_cliente, s.nome AS nome_servico, s.reativacao_objetivo\nFROM reservados f\nJOIN public.agendamentos a ON a.id = f.agendamento_id AND a.empresa_id = f.empresa_id\nJOIN public.servicos s ON s.id = a.servico_id AND s.empresa_id = f.empresa_id\nJOIN public.empresas e ON e.id = f.empresa_id\nJOIN public.clientes c ON c.id = f.cliente_id AND c.empresa_id = f.empresa_id;",
+        "options": {
+          "connectionTimeout": 5
+        }
+      },
+      "id": "83c276bd-637f-4bed-97cd-8e51215d8d44",
+      "name": "Reservar reativações V2",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "rKBK9lfP7PQ1sCNO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const v = $json;\nconst nome = v.nome_cliente || 'cliente';\nconst convite = v.reativacao_objetivo === 'novo_servico'\n  ? 'Gostaria de agendar um novo serviço?'\n  : 'Gostaria de agendar a manutenção de ' + v.nome_servico + '?';\nconst mensagem = 'Olá, ' + nome + '! Já faz um tempo desde seu atendimento de ' + v.nome_servico + ' em ' + v.nome_fantasia + '. ' + convite;\nreturn {json: {...v, mensagem}};"
+      },
+      "id": "2e32a5e9-5a58-46a7-9b3c-e613d765a952",
+      "name": "Montar reativação",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH invalido AS (\n  UPDATE public.fila_mensagens f SET estado = 'cancelado', cancelado_em = now(), processando_em = NULL,\n    ultimo_erro = 'Inelegivel antes do envio'\n  WHERE f.id = $1::uuid AND f.estado = 'processando' AND NOT EXISTS (\n    SELECT 1 FROM public.agendamentos a\n    JOIN public.servicos s ON s.id = a.servico_id AND s.empresa_id = a.empresa_id\n    JOIN public.empresas e ON e.id = a.empresa_id\n    JOIN public.empresa_configuracoes cfg ON cfg.empresa_id = e.id\n    JOIN public.clientes c ON c.id = f.cliente_id AND c.empresa_id = f.empresa_id\n    WHERE a.id = f.agendamento_id AND a.empresa_id = f.empresa_id AND f.estado = 'processando' AND f.tipo = 'reativacao' AND a.status = 'concluido'\n  AND public.calcular_data_reativacao(a.concluido_em, s.prazo_reativacao_dias, s.prazo_reativacao_meses, e.fuso_horario) <= now()\n  AND (s.prazo_reativacao_dias IS NOT NULL OR s.prazo_reativacao_meses IS NOT NULL) AND cfg.reativacao_automatica\n  AND c.aceita_reativacao AND c.anonimizado_em IS NULL AND c.telefone_e164 IS NOT NULL\n  AND e.status_operacional = 'ativo' AND (cfg.janela_envio_inicio IS NULL AND cfg.janela_envio_fim IS NULL OR cfg.janela_envio_inicio IS NOT NULL AND cfg.janela_envio_fim IS NOT NULL AND (CASE WHEN cfg.janela_envio_inicio <= cfg.janela_envio_fim THEN (now() AT TIME ZONE e.fuso_horario)::time >= cfg.janela_envio_inicio AND (now() AT TIME ZONE e.fuso_horario)::time < cfg.janela_envio_fim ELSE (now() AT TIME ZONE e.fuso_horario)::time >= cfg.janela_envio_inicio OR (now() AT TIME ZONE e.fuso_horario)::time < cfg.janela_envio_fim END))\n  AND NOT EXISTS (SELECT 1 FROM public.agendamentos futuro WHERE futuro.empresa_id = a.empresa_id\n    AND futuro.cliente_id = a.cliente_id AND futuro.status = 'confirmado' AND futuro.inicio_em > now())\n  AND NOT EXISTS (SELECT 1 FROM public.agendamentos recente WHERE recente.empresa_id = a.empresa_id\n    AND recente.cliente_id = a.cliente_id AND recente.status = 'concluido' AND recente.concluido_em > a.concluido_em)\n  ) RETURNING f.id\n)\nSELECT EXISTS (SELECT 1 FROM public.fila_mensagens f\n  JOIN public.agendamentos a ON a.id = f.agendamento_id AND a.empresa_id = f.empresa_id\n  JOIN public.servicos s ON s.id = a.servico_id AND s.empresa_id = a.empresa_id\n  JOIN public.empresas e ON e.id = f.empresa_id\n  JOIN public.empresa_configuracoes cfg ON cfg.empresa_id = e.id\n  JOIN public.clientes c ON c.id = f.cliente_id AND c.empresa_id = f.empresa_id\n  WHERE f.id = $1::uuid AND f.estado = 'processando' AND f.tipo = 'reativacao' AND a.status = 'concluido'\n  AND public.calcular_data_reativacao(a.concluido_em, s.prazo_reativacao_dias, s.prazo_reativacao_meses, e.fuso_horario) <= now()\n  AND (s.prazo_reativacao_dias IS NOT NULL OR s.prazo_reativacao_meses IS NOT NULL) AND cfg.reativacao_automatica\n  AND c.aceita_reativacao AND c.anonimizado_em IS NULL AND c.telefone_e164 IS NOT NULL\n  AND e.status_operacional = 'ativo' AND (cfg.janela_envio_inicio IS NULL AND cfg.janela_envio_fim IS NULL OR cfg.janela_envio_inicio IS NOT NULL AND cfg.janela_envio_fim IS NOT NULL AND (CASE WHEN cfg.janela_envio_inicio <= cfg.janela_envio_fim THEN (now() AT TIME ZONE e.fuso_horario)::time >= cfg.janela_envio_inicio AND (now() AT TIME ZONE e.fuso_horario)::time < cfg.janela_envio_fim ELSE (now() AT TIME ZONE e.fuso_horario)::time >= cfg.janela_envio_inicio OR (now() AT TIME ZONE e.fuso_horario)::time < cfg.janela_envio_fim END))\n  AND NOT EXISTS (SELECT 1 FROM public.agendamentos futuro WHERE futuro.empresa_id = a.empresa_id\n    AND futuro.cliente_id = a.cliente_id AND futuro.status = 'confirmado' AND futuro.inicio_em > now())\n  AND NOT EXISTS (SELECT 1 FROM public.agendamentos recente WHERE recente.empresa_id = a.empresa_id\n    AND recente.cliente_id = a.cliente_id AND recente.status = 'concluido' AND recente.concluido_em > a.concluido_em)) AS autorizado;",
+        "options": {
+          "connectionTimeout": 5,
+          "queryReplacement": "={{ [$('Reservar reativações V2').item.json.fila_id] }}"
+        }
+      },
+      "id": "3bfae147-8def-42d6-950a-922ffe7cb091",
+      "name": "Revalidar reativação",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        960,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "rKBK9lfP7PQ1sCNO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "8f75b128-13a7-44c7-a39c-cf1626b42c45",
+              "leftValue": "={{ $json.autorizado }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "22b6714d-2396-4782-9446-4dea645da649",
+      "name": "Pode enviar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://evolution.multiverso360.com.br/message/sendText/' + encodeURIComponent($('Montar reativação').item.json.instancia_evolution) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { number: $('Montar reativação').item.json.telefone_e164.replace(/^\\+/, ''), text: $('Montar reativação').item.json.mensagem } }}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "a8b589ec-e65f-4815-a6b6-38041c40dae3",
+      "name": "Enviar reativação",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "J7noVZ600AuQZxF9",
+          "name": "Evolution API - Envio WhatsApp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT public.marcar_fila_mensagem_enviada($1::uuid, $2::text) AS confirmado\n   WHERE $2::text IS NOT NULL AND $2::text <> '';",
+        "options": {
+          "connectionTimeout": 5,
+          "queryReplacement": "={{ [$('Reservar reativações V2').item.json.fila_id, $json.key?.id ?? null] }}"
+        }
+      },
+      "id": "0819a506-76a7-4265-87f0-5c17b3e1945f",
+      "name": "Confirmar envio",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1680,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "rKBK9lfP7PQ1sCNO",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "A cada 5 minuto(s)": {
+      "main": [
+        [
+          {
+            "node": "Gerar reativações V2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar reativações V2": {
+      "main": [
+        [
+          {
+            "node": "Reservar reativações V2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reservar reativações V2": {
+      "main": [
+        [
+          {
+            "node": "Montar reativação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar reativação": {
+      "main": [
+        [
+          {
+            "node": "Revalidar reativação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revalidar reativação": {
+      "main": [
+        [
+          {
+            "node": "Pode enviar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pode enviar?": {
+      "main": [
+        [
+          {
+            "node": "Enviar reativação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar reativação": {
+      "main": [
+        [
+          {
+            "node": "Confirmar envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {
+    "instanceId": "6f8ac2e6790430d880da7e5cc8fb04fd8a58ba11aa69a9aa9e465c3da4e912fa"
+  },
+  "nodeGroups": [],
+  "tags": []
+}
