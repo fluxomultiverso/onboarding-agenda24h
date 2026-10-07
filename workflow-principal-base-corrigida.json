@@ -253,8 +253,8 @@
       "parameters": {
         "method": "POST",
         "url": "={{ 'https://evolution.multiverso360.com.br/chat/getBase64FromMediaMessage/' + encodeURIComponent($('Normalizar evento V3').first().json.instancia) }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "httpHeaderAuth",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -289,8 +289,8 @@
       "name": "Buscar Audio (Evolution)",
       "credentials": {
         "httpHeaderAuth": {
-          "id": "J7noVZ600AuQZxF9",
-          "name": "Evolution API - Envio WhatsApp"
+          "id": "d1FKH88e0LqiyrFZ",
+          "name": "Header Auth account"
         }
       },
       "onError": "continueErrorOutput"
