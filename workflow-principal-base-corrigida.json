@@ -318,7 +318,9 @@
       "parameters": {
         "resource": "audio",
         "operation": "transcribe",
-        "options": {}
+        "options": {
+          "language": "pt"
+        }
       },
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.8,
