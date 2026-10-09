@@ -106,7 +106,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const b=$('Webhook Evolution').first().json.body||{};\nconst d=b.data||{}, m=d.message||{}, k=d.key||{};\nconst jid=String(k.remoteJid||''); const mt=String(d.messageType||'');\nconst texto=String(m.conversation||m.extendedTextMessage?.text||m.ephemeralMessage?.message?.extendedTextMessage?.text||'');\nconst tipo=mt==='audioMessage'?'audio':['conversation','extendedTextMessage'].includes(mt)?'texto':'outro';\nreturn [{json:{instancia:String(b.instance||'').trim(),evento:JSON.stringify({jid,message_id:String(k.id||''),tipo,from_me:k.fromMe===true,texto}),jid,message_id:String(k.id||''),tipo,from_me:k.fromMe===true}}];"
+        "jsCode": "const b=$('Webhook Evolution').first().json.body||{};\nconst d=b.data||{}, m=d.message||{}, k=d.key||{};\nconst jid=String(k.remoteJid||''); const mt=String(d.messageType||'');\nconst texto=String(m.conversation||m.extendedTextMessage?.text||m.ephemeralMessage?.message?.extendedTextMessage?.text||'');\nconst tipo=mt==='audioMessage'?'audio':['conversation','extendedTextMessage'].includes(mt)?'texto':'outro';\nconst comando=texto.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim().replace(/[.!?]+$/,'').replace(/\\s+/g,' ').toLowerCase();\nconst descadastro_reativacao=tipo==='texto'&&k.fromMe!==true&&( /^(parar|sair|descadastrar|descadastro)$/.test(comando)||/(nao (quero|desejo) (mais )?receber|pare de (me )?(mandar|enviar)|nao (me )?(mande|envie) mais|retire (meu )?contato).*(mensagens|convites|reativacao|retorno)/.test(comando)||/nao quero (mais )?(convites|reativacao|mensagens de retorno)/.test(comando) );\nreturn [{json:{instancia:String(b.instance||'').trim(),evento:JSON.stringify({jid,message_id:String(k.id||''),tipo,from_me:k.fromMe===true,texto}),jid,message_id:String(k.id||''),tipo,from_me:k.fromMe===true,descadastro_reativacao}}];"
       },
       "id": "08cdeb45-cb48-408d-a465-837b6c8ca7db",
       "name": "Normalizar evento V3",
@@ -1173,6 +1173,113 @@
       ],
       "id": "2622f05b-8ca2-4c24-a725-eb58376ed12c",
       "name": "consultar_faq"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "822760a1-4756-4b4d-9386-908e532897b5",
+              "leftValue": "={{ $('Normalizar evento V3').first().json.descadastro_reativacao === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "822760a1-4756-4b4d-9386-908e532897b5",
+      "name": "Pedido de descadastro?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1072,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT public.a24_v3_descadastrar_reativacao($1::text,$2::uuid) AS resultado;",
+        "options": {
+          "connectionTimeout": 10,
+          "queryReplacement": "={{ [$('Normalizar evento V3').first().json.instancia, $('Interpretar registro').first().json.mensagem_id] }}"
+        }
+      },
+      "id": "6db908ec-f8de-4bca-9e79-f921fa073c82",
+      "name": "Aplicar descadastro reativação",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -848,
+        -192
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "29a0uhPjJQJprKcr",
+          "name": "Postgres - Agenda24h Atendimento V3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$('Aplicar descadastro reativação').first().json.resultado||{};\nif(r.sucesso!==true) throw new Error('Não foi possível registrar o descadastro de reativação.');\nreturn [{json:{output:'Pronto. Você não receberá mais convites de retorno deste estabelecimento.'}}];"
+      },
+      "id": "59b3673b-e889-4d0e-aa70-16e9d262d834",
+      "name": "Confirmar descadastro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://evolution.multiverso360.com.br/message/sendText/' + encodeURIComponent($('Normalizar evento V3').first().json.instancia) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $('Normalizar evento V3').first().json.jid }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $('Confirmar descadastro').first().json.output }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -400,
+        -192
+      ],
+      "id": "46fe8b94-d3e9-4551-b875-45bd6045fe07",
+      "name": "Evolution - confirmar descadastro",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "d1FKH88e0LqiyrFZ",
+          "name": "Header Auth account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -1254,7 +1361,7 @@
       "main": [
         [
           {
-            "node": "Precisa transcrever?",
+            "node": "Pedido de descadastro?",
             "type": "main",
             "index": 0
           }
@@ -1621,6 +1728,49 @@
           }
         ]
       ]
+    },
+    "Pedido de descadastro?": {
+      "main": [
+        [
+          {
+            "node": "Aplicar descadastro reativação",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Precisa transcrever?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aplicar descadastro reativação": {
+      "main": [
+        [
+          {
+            "node": "Confirmar descadastro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar descadastro": {
+      "main": [
+        [
+          {
+            "node": "Evolution - confirmar descadastro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution - confirmar descadastro": {
+      "main": []
     }
   },
   "active": false,
