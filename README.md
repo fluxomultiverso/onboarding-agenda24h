@@ -17,11 +17,13 @@ A versão comercial fica em https://onboarding.multiverso360.com.br/vendedora.ht
 
 1. Abra `vendedora.html` e preencha empresa e plano, horários, serviços, pessoas e atendimento.
 2. Use **Salvar rascunho** para guardar um preenchimento incompleto ou **Importar preenchimento** para continuar um cadastro salvo.
-3. Na etapa **Conferir e enviar**, corrija as pendências e use **Baixar cadastro para enviar**.
-4. Envie o arquivo ao responsável pela implantação.
+3. Na etapa **Conferir e enviar**, corrija as pendências e use **Compartilhar cadastro**.
+4. Escolha WhatsApp ou outro aplicativo e selecione o contato do responsável pela implantação. O arquivo do preenchimento atual já é anexado, sem procurar arquivos salvos.
 5. Na versão completa, use **Abrir rascunho**, revise os dados e conclua contrato e provisionamento.
 
 O arquivo comercial usa o mesmo formato `agenda24h-rascunho`, versão `2.0.0`, aceito pelo importador principal. A extensão TXT contém dados estruturados em JSON. O salvamento de rascunhos permite arquivos incompletos; o botão final exige corrigir as pendências do cadastro.
+
+O compartilhamento gera um novo arquivo a partir dos dados abertos a cada toque. Não lê arquivos anteriores do celular e não faz download automático quando o compartilhamento falha ou é cancelado. Em navegadores incompatíveis, uma orientação aparece; o salvamento continua disponível separadamente em **Salvar para continuar depois**. O envio é concluído no aplicativo escolhido, que apresenta suas próprias confirmações.
 
 ## Alterações da versão comercial — 21/10/2026
 

@@ -7,15 +7,36 @@ validar = function () {
   return commercialValidateBase().filter(e => !['f-codigo', 'f-instancia'].includes(e.campo));
 };
 
+async function compartilharCadastro(requireComplete = false) {
+  if (requireComplete && validar().length) {
+    goToStep(5); notice('Confira as pendências antes de compartilhar o cadastro.'); return false;
+  }
+  // Cria o anexo com o estado atual, sem ler arquivos de Downloads.
+  const file = new File([JSON.stringify(makeDraft(), null, 2)], fileName('cadastro', 'txt'), {type: 'text/plain'});
+  try {
+    if (!navigator.share || !navigator.canShare || !navigator.canShare({files: [file]})) {
+      notice('Este navegador não permite compartilhar arquivos. Abra o site no Chrome do celular e tente novamente. Para guardar o preenchimento, use “Salvar para continuar depois”.');
+      return false;
+    }
+    await navigator.share({files: [file]});
+    notice('Cadastro aberto no aplicativo escolhido. Confira o contato e conclua o envio por lá.');
+    return true;
+  } catch (error) {
+    notice(error.name === 'AbortError' ? 'Compartilhamento cancelado. Seu preenchimento continua aqui.' : 'Não foi possível abrir o compartilhamento. Seu preenchimento continua aqui; tente novamente.');
+    return false;
+  }
+}
+
 renderStepRevisao = function (container) {
   const errors = validar();
   const e = state.empresa;
-  container.innerHTML = '<h2>Confira o cadastro</h2><p>Envie o arquivo baixado ao responsável pela implantação. Ele fará a revisão e a ativação.</p>' +
+  container.innerHTML = '<h2>Confira o cadastro</h2><p>Toque em Compartilhar cadastro, escolha WhatsApp e selecione o contato do responsável pela implantação. O arquivo deste preenchimento já vai anexado.</p>' +
     '<fieldset class="form-section"><legend>Resumo</legend><p><strong>' + escapeHtml(e.nome_fantasia || 'Empresa sem nome') + '</strong></p><p>Plano: ' + escapeHtml(getPlano(state.plano_codigo)?.nome || 'Não selecionado') + '</p><p>' + state.servicos.filter(s => s.ativo).length + ' serviços · ' + state.profissionais.filter(p => p.ativo).length + ' profissionais</p><p>Responsável: ' + escapeHtml(state.admin.nome) + '</p><p>Observações: ' + escapeHtml(e.observacoes || 'Nenhuma') + '</p></fieldset>' +
     (errors.length ? '<div class="alert alert-danger">Confira as pendências abaixo. Você pode salvar um rascunho a qualquer momento.</div>' + errors.map((err, i) => '<button class="error-link" data-commercial-error="' + i + '">' + escapeHtml(STEPS[err.step] + ': ' + err.msg) + '</button>').join('') : '<div class="alert alert-info">Cadastro pronto para enviar à implantação.</div>') +
-    '<button class="btn btn-primary" id="commercial-download" ' + (errors.length ? 'disabled' : '') + '>Baixar cadastro para enviar</button>';
+    '<button class="btn btn-primary" id="commercial-share" ' + (errors.length ? 'disabled' : '') + '>Compartilhar cadastro</button><p class="form-hint">Você escolhe o aplicativo e o contato. Não precisa procurar o arquivo no celular.</p><button class="btn btn-secondary" id="commercial-save">Salvar para continuar depois</button>';
   container.querySelectorAll('[data-commercial-error]').forEach(btn => btn.onclick = () => focusError(errors[+btn.dataset.commercialError]));
-  document.getElementById('commercial-download').onclick = () => saveDraft(false);
+  document.getElementById('commercial-share').onclick = () => compartilharCadastro(true);
+  document.getElementById('commercial-save').onclick = () => saveDraft(false);
 };
 
 renderCurrentStep = function () {
@@ -44,7 +65,7 @@ renderCurrentStep = function () {
   });
   const guide = document.createElement('p');
   guide.className = 'alert alert-info';
-  guide.textContent = ['Preencha os dados da empresa e selecione o plano combinado.', 'Confirme os dias e horários com o cliente. Você pode copiar os horários para vários dias.', 'Cadastre os serviços, preços e duração de cada atendimento.', 'Cadastre o responsável e quem realiza cada serviço.', 'Registre como a empresa quer atender seus clientes.', 'Confira as informações e baixe o arquivo para enviar.'][currentStep];
+  guide.textContent = ['Preencha os dados da empresa e selecione o plano combinado.', 'Confirme os dias e horários com o cliente. Você pode copiar os horários para vários dias.', 'Cadastre os serviços, preços e duração de cada atendimento.', 'Cadastre o responsável e quem realiza cada serviço.', 'Registre como a empresa quer atender seus clientes.', 'Confira as informações e compartilhe o cadastro pelo aplicativo de sua preferência.'][currentStep];
   area.prepend(guide);
 };
 
@@ -53,8 +74,8 @@ updateFooter = function () {
   commercialFooterBase();
   const next = document.getElementById('btn-next');
   if (currentStep === 5) {
-    next.textContent = 'Baixar cadastro para enviar';
-    next.onclick = () => saveDraft(false);
+    next.textContent = 'Compartilhar cadastro';
+    next.onclick = () => compartilharCadastro(true);
   } else {
     next.onclick = () => {
       const errors = validar().filter(e => e.step === currentStep);
@@ -69,6 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelector('.brand p').textContent = 'Agenda 24h · Cadastro comercial';
   document.getElementById('btn-open-draft').textContent = 'Importar preenchimento';
   document.getElementById('btn-share-draft').textContent = 'Compartilhar preenchimento';
+  document.getElementById('btn-share-draft').onclick = () => compartilharCadastro(false);
+  document.getElementById('btn-save-draft').textContent = 'Salvar para continuar depois';
   const key = 'agenda24h-comercial-recuperacao-v1';
   let timer;
   const backup = () => {

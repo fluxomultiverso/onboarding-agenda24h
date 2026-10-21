@@ -23,7 +23,37 @@ try {
   assert.equal(await page.evaluate(text=>parseDraft(text).empresa.observacoes,returned),'Revisado pelo responsável');
   await page.evaluate(()=>goToStep(5));
   assert.equal(await page.locator('#provisionamento-chave, #btn-generate-contract, .json-preview').count(),0);
-  assert.equal(await page.locator('#commercial-download').count(),1);
+  assert.equal(await page.locator('#commercial-share').count(),1);
+  // Simula somente a integração do navegador; não envia mensagens a contatos reais.
+  await page.evaluate(() => {
+    window.sharedDrafts = [];
+    Object.defineProperty(navigator, 'canShare', {configurable: true, value: () => true});
+    Object.defineProperty(navigator, 'share', {configurable: true, value: async data => {
+      window.sharedDrafts.push(JSON.parse(await data.files[0].text()));
+    }});
+  });
+  await page.locator('#btn-share-draft').click();
+  await page.waitForFunction(()=>sharedDrafts.length===1);
+  assert.equal(await page.evaluate(()=>sharedDrafts[0].dados.empresa.nome_fantasia),'Salão Teste Comercial');
+  await page.evaluate(()=>{state.empresa.nome_fantasia='Segundo Cliente';});
+  await page.locator('#btn-share-draft').click();
+  await page.waitForFunction(()=>sharedDrafts.length===2);
+  assert.equal(await page.evaluate(()=>sharedDrafts[1].dados.empresa.nome_fantasia),'Segundo Cliente');
+  await page.evaluate(()=>{state.empresa.nome_fantasia='Salão Teste Comercial';});
+  await page.locator('#commercial-share').isDisabled().then(disabled=>assert.equal(disabled,true));
+  let accidentalDownloads = 0;
+  page.on('download',()=>accidentalDownloads++);
+  await page.evaluate(()=>Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>false}));
+  await page.locator('#btn-share-draft').click();
+  assert.match(await page.locator('#file-status').innerText(),/não permite compartilhar/);
+  assert.equal(accidentalDownloads,0);
+  await page.evaluate(()=>{
+    Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>true});
+    Object.defineProperty(navigator,'share',{configurable:true,value:async()=>{throw new DOMException('Cancelado','AbortError');}});
+  });
+  await page.locator('#btn-share-draft').click();
+  assert.match(await page.locator('#file-status').innerText(),/cancelado/);
+  assert.equal(accidentalDownloads,0);
   const downloadEvent=page.waitForEvent('download');
   await page.locator('#btn-save-draft').click();
   const downloaded=await downloadEvent;

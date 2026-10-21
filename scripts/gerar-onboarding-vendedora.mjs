@@ -9,6 +9,6 @@ for (const name of ['index.html', 'onboarding-agenda24h.html']) {
 let html = readFileSync(new URL('index.html', root), 'utf8');
 html = html.replace('<title>Agenda 24h — Onboarding</title>', '<title>Agenda 24h — Cadastro comercial</title>')
   .replace(/<script src="(?:pdf-lib\.min\.js|contrato-pdf\.js[^"]*)"><\/script>\s*/g, '')
-  .replace(/<\/body>\s*<\/html>\s*$/, '<script src="vendedora.js"></script>\n</body>\n</html>\n');
+  .replace(/<\/body>\s*<\/html>\s*$/, '<script src="vendedora.js?v=20261021-compartilhar"></script>\n</body>\n</html>\n');
 writeFileSync(new URL('vendedora.html', root), html);
 console.log('Página comercial gerada a partir do onboarding principal.');
