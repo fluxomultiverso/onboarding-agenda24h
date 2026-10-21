@@ -1,0 +1,100 @@
+// Camada comercial: mantém o mesmo modelo e importador do onboarding principal.
+STEPS[4] = 'Atendimento';
+STEPS[5] = 'Conferir e enviar';
+const renderCommercialBase = renderCurrentStep;
+const commercialValidateBase = validar;
+validar = function () {
+  return commercialValidateBase().filter(e => !['f-codigo', 'f-instancia'].includes(e.campo));
+};
+
+renderStepRevisao = function (container) {
+  const errors = validar();
+  const e = state.empresa;
+  container.innerHTML = '<h2>Confira o cadastro</h2><p>Envie o arquivo baixado ao responsável pela implantação. Ele fará a revisão e a ativação.</p>' +
+    '<fieldset class="form-section"><legend>Resumo</legend><p><strong>' + escapeHtml(e.nome_fantasia || 'Empresa sem nome') + '</strong></p><p>Plano: ' + escapeHtml(getPlano(state.plano_codigo)?.nome || 'Não selecionado') + '</p><p>' + state.servicos.filter(s => s.ativo).length + ' serviços · ' + state.profissionais.filter(p => p.ativo).length + ' profissionais</p><p>Responsável: ' + escapeHtml(state.admin.nome) + '</p><p>Observações: ' + escapeHtml(e.observacoes || 'Nenhuma') + '</p></fieldset>' +
+    (errors.length ? '<div class="alert alert-danger">Confira as pendências abaixo. Você pode salvar um rascunho a qualquer momento.</div>' + errors.map((err, i) => '<button class="error-link" data-commercial-error="' + i + '">' + escapeHtml(STEPS[err.step] + ': ' + err.msg) + '</button>').join('') : '<div class="alert alert-info">Cadastro pronto para enviar à implantação.</div>') +
+    '<button class="btn btn-primary" id="commercial-download" ' + (errors.length ? 'disabled' : '') + '>Baixar cadastro para enviar</button>';
+  container.querySelectorAll('[data-commercial-error]').forEach(btn => btn.onclick = () => focusError(errors[+btn.dataset.commercialError]));
+  document.getElementById('commercial-download').onclick = () => saveDraft(false);
+};
+
+renderCurrentStep = function () {
+  renderCommercialBase();
+  const area = document.getElementById('steps-container');
+  // Remover os controles depois do vínculo preserva os valores dos rascunhos importados.
+  area.querySelector('#f-codigo')?.closest('fieldset').remove();
+  const labels = {
+    'f-obs': 'Observações para implantação',
+    'ia-nome': 'Como a assistente deve se chamar?',
+    'ia-tom': 'Como ela deve conversar com os clientes?',
+    'ia-apres': 'Como você apresentaria a empresa ao cliente?',
+    'ia-obj': 'Qual é o principal objetivo do atendimento?',
+    'ia-num-hum': 'Qual número deve receber o cliente quando precisar de uma pessoa?',
+    'ia-msg-trans': 'O que a assistente deve dizer ao encaminhar o cliente?'
+  };
+  for (const [id, text] of Object.entries(labels)) {
+    const input = document.getElementById(id);
+    const label = input?.closest('.form-field')?.querySelector('label');
+    if (label) { label.textContent = text; input.setAttribute('aria-label', text); }
+  }
+  const tone = document.getElementById('ia-tom');
+  if (tone) tone.placeholder = 'Ex.: simpática e objetiva, com linguagem simples.';
+  area.querySelectorAll('.form-hint').forEach(hint => {
+    hint.textContent = hint.textContent.replace('Será incluído no system prompt.', 'Use as palavras do cliente.');
+  });
+  const guide = document.createElement('p');
+  guide.className = 'alert alert-info';
+  guide.textContent = ['Preencha os dados da empresa e selecione o plano combinado.', 'Confirme os dias e horários com o cliente. Você pode copiar os horários para vários dias.', 'Cadastre os serviços, preços e duração de cada atendimento.', 'Cadastre o responsável e quem realiza cada serviço.', 'Registre como a empresa quer atender seus clientes.', 'Confira as informações e baixe o arquivo para enviar.'][currentStep];
+  area.prepend(guide);
+};
+
+const commercialFooterBase = updateFooter;
+updateFooter = function () {
+  commercialFooterBase();
+  const next = document.getElementById('btn-next');
+  if (currentStep === 5) {
+    next.textContent = 'Baixar cadastro para enviar';
+    next.onclick = () => saveDraft(false);
+  } else {
+    next.onclick = () => {
+      const errors = validar().filter(e => e.step === currentStep);
+      if (errors.length) { focusError(errors[0]); notice(errors[0].msg); return; }
+      goToStep(currentStep + 1);
+    };
+  }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelector('.header-title').textContent = 'Cadastro de cliente';
+  document.querySelector('.brand p').textContent = 'Agenda 24h · Cadastro comercial';
+  document.getElementById('btn-open-draft').textContent = 'Importar preenchimento';
+  document.getElementById('btn-share-draft').textContent = 'Compartilhar preenchimento';
+  const key = 'agenda24h-comercial-recuperacao-v1';
+  let timer;
+  const backup = () => {
+    try { localStorage.setItem(key, JSON.stringify(makeDraft())); }
+    catch { notice('Não foi possível guardar a recuperação neste navegador. Salve um rascunho em arquivo.'); }
+  };
+  let previous;
+  try { previous = localStorage.getItem(key); } catch {}
+  if (previous) {
+    const button = document.createElement('button');
+    button.className = 'btn btn-ghost btn-sm';
+    button.textContent = 'Recuperar último preenchimento';
+    button.onclick = () => {
+      showModal('Recuperar preenchimento', 'Substituir os dados da tela pelo último preenchimento guardado neste navegador?', () => {
+        try {
+          state = parseDraft(previous); currentStep = state.etapa_atual;
+          renderStepsNav(); renderCurrentStep(); updateFooter(); fileDirty = true;
+          notice('Preenchimento recuperado. Salve um arquivo para enviar.');
+        } catch { notice('Não foi possível recuperar. Importe o arquivo de rascunho salvo.'); }
+      }, 'Recuperar');
+    };
+    document.querySelector('.header-actions').append(button);
+  }
+  for (const event of ['input', 'change', 'click']) document.addEventListener(event, () => {
+    clearTimeout(timer); timer = setTimeout(backup, 400);
+  });
+  window.addEventListener('pagehide', backup);
+  notice('Recuperação local disponível neste navegador. Salve um rascunho em arquivo para guardar e enviar.');
+});
