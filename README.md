@@ -2,12 +2,23 @@
 
 Formulário para coletar presencialmente os dados de empresas que contratam a Agenda 24h: plano, serviços, horários, equipe e preferências de atendimento da assistente.
 
-## Duas versões
+## Três versões
 
 | Página | Quem usa | Finalidade |
 | --- | --- | --- |
 | `index.html` e `onboarding-agenda24h.html` | Responsável pela implantação | Cadastro completo, revisão, contrato PDF, arquivos técnicos e provisionamento |
 | `vendedora.html` | Colaboradora comercial | Coleta guiada dos dados, revisão e entrega de um arquivo para implantação |
+| `cliente.html` | Cliente que contrata online | Preenchimento guiado, progresso automático e envio para implantação manual |
+
+### Cadastro online — primeira etapa
+
+`cliente.html` usa o mesmo formato importável da versão principal. Não apresenta salvar/abrir/novo rascunho, downloads nem exportações técnicas. Guarda e recupera automaticamente o progresso neste navegador, separado do cadastro comercial. Essa recuperação local ainda não acompanha o cliente entre dispositivos.
+
+A conclusão oferece **Enviar por WhatsApp**, com o arquivo atual anexado ao compartilhamento nativo, e **Enviar por e-mail**, desabilitado com indicação de disponibilidade futura. O compartilhamento permite ao usuário escolher aplicativo e contato; o site não consegue obrigar a escolha do WhatsApp. Não há envio automático nem confirmação fictícia de recebimento.
+
+Ainda faltam o serviço de envio direto por e-mail, identificação do plano comprado, confirmação Stripe, token e controle de acesso no servidor. Nesta etapa, o plano continua selecionável; nenhuma informação de pagamento é assumida ou validada. A página não provisiona empresas. Não usar como liberação pós-pagamento antes de concluir essas integrações.
+
+Para gerar esta página, execute `node scripts/gerar-onboarding-cliente.mjs` após mudanças na base ou em `vendedora.js`. A camada gerada `cliente-base.js` reaproveita apenas formulário e linguagem comercial, sem os controles e a recuperação da vendedora. O comportamento específico fica em `cliente.js`. Teste com `node scripts/testar-onboarding-cliente.mjs` (mesmos requisitos de navegador do teste comercial).
 
 Endereço principal: https://onboarding.multiverso360.com.br/
 
